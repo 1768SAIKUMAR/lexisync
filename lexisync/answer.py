@@ -291,7 +291,11 @@ def grounded_answer(text: str, hits: list[Hit], claims: list[Claim]) -> str:
 
 
 def _claims_answer(claims: list[Claim]) -> str:
-    return " ".join(f"{c.text.rstrip('.')} ({'; '.join(c.labels)})." for c in claims)
+    """Fallback answer built only from verified claims, one sentence per claim."""
+    def sentence(t: str) -> str:
+        t = t.strip().rstrip(".;:")
+        return t[:1].upper() + t[1:]
+    return " ".join(f"{sentence(c.text)} ({'; '.join(c.labels)})." for c in claims)
 
 
 def _confidence(claims: list[Claim], dropped: list[Claim], rel: float | None,

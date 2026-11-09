@@ -26,7 +26,7 @@ retrieval:
   bm25_b: 0.75
   rrf_k: 60                     # Reciprocal Rank Fusion constant
   candidates: 30                # fused candidates sent to the reranker
-  top_k: 4                      # passages given to the LLM (UI slider default)
+  top_k: 6                      # passages given to the LLM (best in evaluation: k=6 > k=4)
 
 llm:
   backend: ollama               # ollama | openai | mock   (env LEXISYNC_LLM overrides)
