@@ -83,3 +83,65 @@ references on p. 1-2), 352 running-header lines removed (4 patterns: date,
 two-column: the signature block "For the European Parliament | For the Council",
 which really is side by side. Article 83 comes out as heading → title →
 "1." → "2." → points (a), (b)… in order.
+
+**Speed fix.** `find_tables()` took 21 of 22 s on the GDPR because every page
+has *some* drawn line (header rule, footnote separator). `may_have_table()` first
+counts real ruling lines: ≥ 2 horizontal (≥ 20 pt wide) and ≥ 2 vertical
+(≥ 10 pt tall) outside the header band. Result: 22 s → 1 s, identical output.
+Matters in the exam: the unseen PDF is indexed live.
+
+## Stage 2 — Clause-aware chunking (`lexisync/chunking.py`)
+
+**Goal.** One chunk = one citable legal unit, so every citation can name
+exactly one clause, and the verifier can check a quote against exactly that text.
+
+**Why not fixed-size chunks?** A 500-token window can cut Article 83(4) in half,
+or put the end of 83(4) and the start of 83(5) in one chunk. Then "up to
+10 000 000 EUR" and "up to 20 000 000 EUR" sit in the same passage, the LLM can
+swap them, and a citation can't say which paragraph it came from.
+
+**Three schemes, chosen per document** by counting markers:
+- `eu` (≥ 2 blocks that are exactly "Article N"): Recitals "(n)" before the
+  first article; "Article N" + title line; paragraphs "1." → clause "N(1)";
+  "(n)" inside an article → "N(n)" (definitions, e.g. 4(11) 'consent');
+  CHAPTER / Section lines become *context*, not chunks.
+- `contract` (≥ 3 clause markers): "7. Liability" heading, inline heading
+  "1. Definitions. In this…", clause "7.2 …", numbered section without heading.
+- `page` fallback: one section per page (e.g. a judgment without numbering).
+
+*Why decide per document?* "1." means "paragraph 1 of this Article" in a
+regulation but "Section 1" in a contract. The scheme resolves the ambiguity.
+
+*Why must the whole block be "Article N"?* Lines inside paragraphs also start
+with "Article 6(1)…" (30 such blocks in the GDPR). Matching only a block that is
+*just* the heading avoids false article starts.
+
+**Merge rule (< 120 chars).** A tiny chunk joins the previous chunk *of the same
+clause* only. "Article 83" (10 chars) is merged *forward* into 83(1). A genuinely
+short paragraph like 68(2) "The Board shall be represented by its Chair." stays
+alone, because merging it into 68(1) would make the citation wrong.
+
+**Split rule (> 1500 chars).** Split preferably before points (a), (b)… (each point
+is its own block), otherwise at sentence ends. Later parts get the paragraph's
+lead-in sentence as *context* ("…due regard shall be given to the following:"),
+so "(i) where measures…" still makes sense alone. A leftover piece under 120
+chars is folded back (no "(j)" orphan).
+
+**What each chunk keeps.** doc id, section, clause, title, verbatim text, page
+range, the bbox of every block it came from, kind (text / recital / definition
+/ table / page), context, and a label like **"GDPR p. 83, Article 83(5)"**.
+
+**`index_text()`**: what retrieval sees = label + title + context + text. So a
+query "administrative fines" matches the title, and "83(5)" matches the label,
+while `text` stays verbatim for the quote verifier and the highlight.
+
+**Tables.** Their own chunk; a preceding "Table 9.1 …" caption becomes the title,
+so the label reads "… p. 18, Table 9.1", as in the assignment example.
+
+**Verified on the GDPR.** 638 chunks (405 article paragraphs, 207 recital
+chunks covering all 173 recitals, 26 definitions), all 99 articles found,
+median 408 chars, max 1535. 83(4) holds €10M / 2 %, 83(5) holds €20M / 4 %,
+each in its own chunk.
+
+**Limitations.** Annexes and sub-paragraph numbering like "1a" are not special-
+cased; a contract with unusual numbering ("Clause Seven") falls back to pages.

@@ -86,12 +86,22 @@ class Chunk:
 
     @property
     def label(self) -> str:
-        """Human-readable citation, e.g. 'GDPR p. 83, Article 83(5)'."""
+        """Human-readable citation: 'GDPR p. 83, Article 83(5)',
+        'GDPR p. 2, Recital (4)', 'MSA p. 1, clause 7.2', 'X p. 3'."""
         if self.page_start == self.page_end:
             pages = f"p. {self.page_start + 1}"
         else:
             pages = f"pp. {self.page_start + 1}-{self.page_end + 1}"
-        ref = self.clause or self.section
-        if ref and self.section.lower().startswith("article") and self.clause:
-            ref = f"Article {self.clause}"
+        if self.section.startswith("Article"):
+            ref = f"Article {self.clause}" if self.clause else self.section
+        elif self.section.startswith(("Recital", "Preamble", "Page")):
+            ref = "" if self.section.startswith("Page") else self.section
+        elif self.clause:
+            ref = f"clause {self.clause}"
+        else:
+            ref = self.section.lower()
+        if self.kind == "table":
+            import re
+            m = re.match(r"Table\s+[\w.]+", self.title, re.I)
+            ref = f"{ref}, {m.group(0)}" if m and ref else (m.group(0) if m else f"{ref} table".strip())
         return f"{self.doc_name} {pages}, {ref}" if ref else f"{self.doc_name} {pages}"

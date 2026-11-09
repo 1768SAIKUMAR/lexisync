@@ -137,6 +137,58 @@ def make_contract(path: Path) -> None:
     doc.save(path)
 
 
+def make_eu_regulation(path: Path) -> None:
+    """Mini EU regulation: preamble, recitals, chapter, Article with title,
+    numbered paragraphs, a long paragraph with points (a)-(h), definitions."""
+    doc = pymupdf.open()
+    p = doc.new_page(width=W, height=H)
+    y = 60
+
+    def put(text, size=10, x0=60, h=None):
+        nonlocal y, p
+        h = h or (size * 1.4) * (1 + len(text) // 95)
+        if y + h > 790:
+            p = doc.new_page(width=W, height=H)
+            y = 60
+        _box(p, (x0, y, 535, y + h + 4), text, size)
+        y += h + 10
+
+    put("REGULATION (EU) 2099/1 ON TEST MATTERS", 12)
+    put("Whereas:")
+    put("(1) Natural persons should have control of their own personal data and "
+        "this Regulation sets out the rules for that control.")
+    put("(2) Fines should be proportionate and dissuasive in each individual case.")
+    put("HAVE ADOPTED THIS REGULATION:")
+    put("CHAPTER I", 11)
+    put("General provisions", 11)
+    put("Article 1", 11)
+    put("Subject-matter", 11)
+    put("1. This Regulation lays down rules on the protection of natural persons.")
+    put("2. This Regulation protects fundamental rights.")
+    put("Article 4", 11)
+    put("Definitions", 11)
+    put("For the purposes of this Regulation:")
+    put("(1) 'personal data' means any information relating to an identified or "
+        "identifiable natural person.")
+    put("(2) 'consent' means any freely given, specific, informed and unambiguous "
+        "indication of the wishes of the data subject.")
+    put("CHAPTER VIII", 11)
+    put("Penalties", 11)
+    put("Article 83", 11)
+    put("General conditions for imposing administrative fines", 11)
+    put("2. When deciding whether to impose an administrative fine and deciding on "
+        "the amount of the administrative fine in each individual case due regard "
+        "shall be given to the following:")
+    for letter in "abcdefgh":
+        put(f"({letter}) factor {letter}: " + "the nature, gravity and duration of the "
+            "infringement taking into account the scope or purpose of the processing "
+            "concerned as well as the number of data subjects affected;")
+    put("5. Infringements of the following provisions shall be subject to "
+        "administrative fines up to 20 000 000 EUR, or in the case of an undertaking, "
+        "up to 4 % of the total worldwide annual turnover.")
+    doc.save(path)
+
+
 ALL = {
     "two_column.pdf": make_two_column,
     "single_indented.pdf": make_single_column_indented,
@@ -145,6 +197,7 @@ ALL = {
     "table.pdf": make_table,
     "scanned.pdf": make_scanned,
     "contract.pdf": make_contract,
+    "eu_regulation.pdf": make_eu_regulation,
 }
 
 

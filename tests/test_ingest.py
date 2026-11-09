@@ -142,3 +142,11 @@ def test_report_shows_counts_and_page_numbers(pdfs):
     text = format_report(ingest_pdf(pdfs["two_column.pdf"]).report)
     assert "two-column pages: 1  (p. 1)" in text
     assert "scanned pages: 0" in text
+
+
+def test_table_precheck_skips_pages_without_grid(pdfs):
+    import pymupdf
+    from lexisync.ingest import may_have_table
+    assert may_have_table(pymupdf.open(pdfs["table.pdf"])[0])
+    assert not may_have_table(pymupdf.open(pdfs["footnotes.pdf"])[0])
+    assert not may_have_table(pymupdf.open(pdfs["contract.pdf"])[0])

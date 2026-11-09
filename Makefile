@@ -1,7 +1,7 @@
 # One-command runs. Targets are added stage by stage.
 PY ?= python3
 
-.PHONY: setup docs synthetic structure test
+.PHONY: setup docs synthetic structure chunks test
 
 setup:            ## install pinned dependencies
 	$(PY) -m pip install -r requirements.txt
@@ -17,3 +17,6 @@ structure:        ## print the structure report for every PDF in data/docs
 
 test:             ## run the unit tests
 	$(PY) -m pytest -q
+
+chunks:           ## show chunking summary + first chunks for every PDF in data/docs
+	for f in data/docs/*.pdf; do $(PY) -m lexisync.chunking $$f 8; done
