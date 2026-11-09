@@ -75,3 +75,11 @@ tables, footnotes, removed header lines. It is shown in the UI after indexing
 are often missed by `find_tables`; three-column layouts are read as one column;
 footnotes without "(n)" markers (e.g. "¹") are not detected; OCR quality is not
 measured yet (Stage 7 adds an OCR benchmark).
+
+**Verified on the real GDPR (OJ L 119, 88 pages).** 1,639 blocks, 0 scanned
+pages, 0 tables (correct: the GDPR has none), 21 footnotes (the "(1) OJ C 229…"
+references on p. 1-2), 352 running-header lines removed (4 patterns: date,
+"L 119/#", "EN", "Official Journal of the European Union"). Only p. 88 is
+two-column: the signature block "For the European Parliament | For the Council",
+which really is side by side. Article 83 comes out as heading → title →
+"1." → "2." → points (a), (b)… in order.

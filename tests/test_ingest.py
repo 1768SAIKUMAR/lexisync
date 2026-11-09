@@ -135,3 +135,10 @@ def test_split_inside_one_block_keeps_points_together():
     out = split_at_clauses(lines)
     assert [t.split("\n")[0][:2] for t, _ in out] == ["4.", "5."]
     assert out[0][1] == (0, 0, 100, 20) and out[1][1] == (0, 30, 100, 50)
+
+
+def test_report_shows_counts_and_page_numbers(pdfs):
+    from lexisync.ingest import format_report
+    text = format_report(ingest_pdf(pdfs["two_column.pdf"]).report)
+    assert "two-column pages: 1  (p. 1)" in text
+    assert "scanned pages: 0" in text

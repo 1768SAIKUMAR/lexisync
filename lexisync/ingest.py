@@ -410,17 +410,18 @@ def ingest_pdf(path: str | Path, doc_id: str | None = None, name: str | None = N
 
 
 def format_report(r: StructureReport) -> str:
+    """Counts first, then the page numbers, so "1 (p. 88)" can't be misread."""
     def pg(xs):
-        return ", ".join(map(str, xs)) if xs else "none"
+        return f"{len(xs)}" + (f"  (p. {', '.join(map(str, xs))})" if xs else "")
     return "\n".join([
         f"Document: {r.doc_id}",
         f"  pages: {r.n_pages}   blocks: {r.n_blocks}",
-        f"  scanned pages: {pg(r.scanned_pages)}  (OCR: {pg(r.ocr_pages)}; "
-        f"skipped, no Tesseract: {pg(r.ocr_skipped_pages)})",
+        f"  scanned pages: {pg(r.scanned_pages)}",
+        f"    OCR'd: {pg(r.ocr_pages)}   skipped (no Tesseract): {pg(r.ocr_skipped_pages)}",
         f"  two-column pages: {pg(r.two_column_pages)}",
         f"  tables: {r.n_tables}   footnotes: {r.n_footnotes}",
         f"  removed header/footer lines: {r.n_removed_lines} "
-        f"({len(r.removed_header_lines)} distinct)",
+        f"({len(r.removed_header_lines)} distinct patterns)",
     ])
 
 

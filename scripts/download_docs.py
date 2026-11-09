@@ -29,7 +29,11 @@ def download(out_dir: Path) -> None:
         r = requests.get(url, headers=HEADERS, timeout=120)
         r.raise_for_status()
         if not r.content.startswith(b"%PDF"):
-            sys.exit(f"{name}: response is not a PDF ({r.headers.get('content-type')})")
+            # EUR-Lex answers scripts with a bot-check web page instead of the PDF.
+            print(f"{name}: the site returned a web page, not a PDF.\n"
+                  f"  Open this link in your browser, save the PDF, and move it to {dest}:\n"
+                  f"  {url}")
+            continue
         dest.write_bytes(r.content)
         print(f"wrote {dest} ({len(r.content) // 1024} KB)")
 
