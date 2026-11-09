@@ -57,8 +57,14 @@ def norm(s: str) -> str:
     return re.sub(r"\s+", " ", s)
 
 
+def norm_doc(doc_id: str) -> str:
+    """Document ids are slugs of the file name ("basic_law.pdf" -> "basic-law");
+    accept either spelling in the question files."""
+    return re.sub(r"[^a-z0-9]+", "-", doc_id.lower()).strip("-")
+
+
 def matches(chunk, gold: dict, level: str) -> bool:
-    if chunk.doc_id != gold["doc"] or chunk.section != gold["section"]:
+    if norm_doc(chunk.doc_id) != norm_doc(gold["doc"]) or chunk.section != gold["section"]:
         return False
     return level == "article" or not gold["clause"] or chunk.clause == gold["clause"]
 

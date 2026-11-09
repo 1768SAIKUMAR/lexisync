@@ -83,3 +83,11 @@ def test_eval_survives_llm_failure(pdfs, tmp_path, monkeypatch):
     run_eval.run_config("full", idx, Broken(), cfg, qs, run_file, resume=False)
     row = json.loads(run_file.read_text())
     assert row["confidence"] == "ERROR" and "180 s" in row["error"]
+
+
+def test_gold_doc_id_spelling_is_normalised():
+    from types import SimpleNamespace
+    from eval.run_eval import matches
+    ch = SimpleNamespace(doc_id="basic-law", section="Article 38", clause="38(2)")
+    assert matches(ch, {"doc": "basic_law", "section": "Article 38", "clause": "38(2)"}, "paragraph")
+    assert not matches(ch, {"doc": "gdpr", "section": "Article 38", "clause": "38(2)"}, "article")
