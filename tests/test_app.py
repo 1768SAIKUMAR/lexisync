@@ -29,11 +29,13 @@ def app(pdfs, tmp_path, monkeypatch):
 def test_app_starts_with_seeded_case(app):
     assert app.sidebar.selectbox[0].value == "gdpr-demo"
     assert "reg" in app.sidebar.multiselect[0].value
-    assert app.sidebar.radio[0].value.startswith("Mock")      # no Ollama here
+    # LLM choice depends on whether Ollama is running on this machine
+    assert app.sidebar.radio[0].value in ("Ollama (local)", "Mock (offline demo)")
     assert [t.label for t in app.tabs] == ["Ask", "Documents & structure", "Evaluation"]
 
 
 def test_ask_shows_answer_badge_claims_and_page(app):
+    app.sidebar.radio[0].set_value("Mock (offline demo)").run()   # never call a real LLM
     app.text_area(key="q").set_value("What are the maximum administrative fines?").run()
     app.button[[b.label for b in app.button].index("Ask")].click().run()
     assert not app.exception, app.exception
