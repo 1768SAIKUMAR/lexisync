@@ -468,3 +468,18 @@ if a claim shows ✘ it was *dropped* — that is the verifier working, show it.
 - **Measured.** Before → after (full system, 20 questions): correct 75 % → 80 %, false
   abstention 12 % → 6 %, citation precision 82 % → 83 %, unanswerable still 4/4, latency
   +4 s. f02 fixed; f04 still refused (honest remaining weakness).
+
+## Held-out result (German Basic Law, never used in development)
+
+- Retrieval recall@3 1.00, MRR 0.90; 7/8 correct; 3/3 unanswerable refused (2 by the gate,
+  "how many members currently" by the model); 0/5 answerable wrongly refused; ~10 s/answer.
+- A scoring bug first showed recall 0.00: the file `basic_law.pdf` becomes the id `basic-law`,
+  the questions said `basic_law`. Lesson: when a metric says 0 but the answers look right,
+  suspect the measurement first. Fixed by normalising ids (with a test).
+- The one error, h02 (voting age): the right passage, Article 38(2), was retrieved, but the
+  model cited Article 54(1) (Federal President, age 40), which shares the words "entitled to
+  vote in Bundestag elections". The verifier accepted it because the quote is genuinely
+  there. **Exam answer:** "My verifier guarantees faithfulness to the cited passage, not
+  relevance to the question. A fix would be a second check that the claim answers the
+  question (e.g. cross-encoder score of question vs. claim), but I did not tune after the
+  held-out run, to keep the test honest."

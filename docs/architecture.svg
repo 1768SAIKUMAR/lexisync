@@ -96,5 +96,5 @@
 <text x="60" y="900" font-size="17" fill="#222" font-weight="bold" text-anchor="start">EVALUATION</text>
 <text x="60" y="928" font-size="16" fill="#333" text-anchor="start">20 questions (11 factual, 5 multi-hop incl. 3 cross-document, 4 unanswerable) + held-out set on an unseen document · recall@1/3/5/10 + MRR per retrieval mode</text>
 <text x="60" y="954" font-size="16" fill="#333" text-anchor="start">recall@3: BM25 0.61 · dense 0.77 · hybrid 0.71 · +rerank 0.83 · +planner 0.93 (MRR 0.93) · OCR CER 3.2 %</text>
-<text x="60" y="980" font-size="16" fill="#333" text-anchor="start">end-to-end correct: closed-book 35 % · dense-only 60 % · full 75 % → 80 % with second look (cit. precision 83 %) · unanswerable abstained 4/4 (closed-book 3/4)</text>
+<text x="60" y="980" font-size="16" fill="#333" text-anchor="start">end-to-end correct: closed-book 35 % · dense-only 60 % · full 75 % → 80 % with second look (cit. precision 83 %) · unanswerable abstained 4/4 · held-out Basic Law: 7/8 correct, 3/3 refused</text>
 </svg>

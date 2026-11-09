@@ -141,6 +141,26 @@ What this shows:
 - Full report: `reports/main/report.md`; manual grades go in the `manual_correct` column of
   `reports/main/answers.csv` (then `python eval/run_eval.py --summary-only`).
 
+**Held-out test** (run once after all tuning, nothing changed afterwards): the German Basic
+Law (English translation, a document type never used during development, 631 chunks),
+8 questions in `eval/heldout.jsonl` — 4 factual, 1 multi-hop, 3 unanswerable.
+
+| | result |
+|---|---|
+| retrieval recall@3 (hybrid + rerank) | 1.00 (MRR 0.90; BM25 alone 0.70) |
+| correct answers | 88 % (7/8) |
+| citation precision | 80 % |
+| unanswerable refused | 3/3 (2 by the gate, 1 by the model) |
+| answerable wrongly refused | 0/5 |
+| average latency | 10 s |
+
+The one error (h02, "from what age can people vote?") is instructive: retrieval had the
+right passage (Article 38(2), age 18) in the top 3, but the model cited Article 54(1)
+(election of the Federal President, age 40), which contains the exact phrase "entitled to
+vote in Bundestag elections". The verifier passed it because the quote *is* in that
+passage: it checks that a claim is supported by its citation, not that the citation answers
+the question. As agreed for a held-out test, this was not tuned away.
+
 **OCR** (synthetic scanned pages with known text, 200 dpi): mean character error rate 3.2 %,
 word error rate 3.5 %; clause-number recall on the hardest page improved from 12 % to 88 %
 by running two Tesseract page-segmentation modes and keeping the one that finds more
@@ -154,8 +174,11 @@ clause numbers.
 - Answers are slow on a laptop CPU/GPU (15–40 s per question; ~80 s with a retry).
 - Tables and scanned pages are handled, but complex nested tables and poor scans lose
   structure; OCR text keeps page-level, not word-perfect, highlighting.
-- The abstention threshold was chosen on our own question set; a very different document
-  type may need recalibration (that is what the held-out test checks).
+- The abstention threshold was chosen on our own question set; on the held-out document it
+  still refused 3/3 unanswerable and 0/5 answerable questions.
+- The verifier proves a claim is *in* the cited passage, not that the passage answers the
+  question (held-out h02: a quote about the President's minimum age answered a voting-age
+  question).
 - This is a reading aid, not legal advice.
 
 ## Project layout
