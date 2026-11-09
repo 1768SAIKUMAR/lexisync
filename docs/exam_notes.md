@@ -204,3 +204,71 @@ run without downloading models. Never used for reported numbers.
 
 **Document filter.** `doc_ids` restricts search to the documents of the
 current case (UI case selection).
+
+**Measured on the real models (MacBook, GDPR).** Best cross-encoder relevance:
+answerable fines question 0.36 (single query) / 0.57 (planner); unanswerable
+"governing law of the subcontractor agreement" **0.00**. The planner raised the
+best relevance from 0.36 to 0.57 and put 83(5) first. First rerank call 2.4 s
+(model load), afterwards ~0.15–0.3 s.
+
+## Stage 4 — Grounded answers (`answer.py`, `llm.py`, `pipeline.py`)
+
+**Goal.** Every sentence the user sees is backed by a verified quote from a cited
+passage; otherwise the system abstains. The LLM is never trusted on its own.
+
+**1. Retrieval gate (before the LLM).** If the best rerank relevance < 0.10,
+abstain immediately and list the documents searched. *Why before the LLM?* An
+LLM given irrelevant passages tends to answer anyway from its own knowledge; if it
+never sees the question, it can't hallucinate. *Why 0.10?* Measured: answerable
+0.36–0.57, unanswerable 0.00. The evaluation logs best relevance for all
+answerable vs unanswerable questions to justify the value.
+
+**2. Prompt.** Passages numbered [C1]..[Ck], each with label + title + text, so
+the model can refer to them unambiguously and we can map [C2] back to "GDPR p. 83,
+Article 83(5)". Rules: only the passages; exact 5–25-word quote per claim; copy
+numbers exactly, never swap them; keep default rules and exceptions apart; report
+conflicts; partial answers name what's missing; abstain if nothing fits.
+
+**3. JSON schema, in this order:** claims (text, citations, quote) → answer →
+missing → abstain → explanation → conflicts. An LLM generates left to right, so
+field order is reasoning order: it must first commit to evidence, and only at the
+end decide whether to abstain. If "abstain" came first, the model would decide
+before looking at evidence and then rationalise. Ollama's `format` = the schema
+constrains decoding to valid JSON; temperature 0 + seed 42 make it deterministic.
+
+**4. Verifier (code, not the LLM).** For each claim:
+- the quote must appear in a cited passage: rapidfuzz `partial_ratio` ≥ 85 (best
+  matching substring; tolerant to PDF line breaks and spacing) **or** ≥ 60 % of the
+  quote's words occur in the passage;
+- every number in the claim must occur in that passage. Numbers are compared
+  as values: "20 000 000", "20,000,000" and "EUR 20 million" are all 2e7. This
+  catches the classic error of putting 83(4)'s €10M into 83(5)'s claim.
+- a claim citing a passage id that wasn't given is rejected.
+
+**5. Retry loop (planner + verifier agent, bonus feature 5).** If any claim fails:
+reformulate the query (question + content words of the failed claims), retrieve
+again, regenerate, keeping the passages that back already-verified claims. Max 2
+attempts (step cap). Claims still failing are dropped; if none survive → abstain
+("no claim could be verified"). Each attempt is logged: query, passages, verified
+count, rejected claims with reasons. That log is the retry log the assignment asks for.
+
+**Never show unverified text.** If any claim was dropped, the answer is rebuilt
+from the verified claims only, instead of using the model's free-text answer.
+
+**6. Confidence.**
+- INSUFFICIENT EVIDENCE: abstained.
+- HIGH: every claim verified first time, nothing missing, relevance ≥ 0.7.
+- LOW: relevance < 0.3, or at least as many claims dropped as kept.
+- MEDIUM: everything else (e.g. partial answer, or a claim dropped).
+
+**7. Closed-book baseline.** Same LLM, no retrieval, no passages: confidence
+"UNGROUNDED". Gives the mandatory *no-retrieval vs retrieval* comparison.
+
+**Backends.** Ollama (local qwen2.5:7b, default), any OpenAI-compatible API
+(cloud fallback, allowed by the assignment), MockLLM (deterministic; scripted
+responses make every branch of the verifier testable).
+
+**Why verify in code rather than ask a second LLM?** It is deterministic, fast
+(< 1 ms), explainable in one sentence, and can't itself hallucinate. Limitation:
+it checks that the quote exists and the numbers match, not that the claim's
+*interpretation* of the quote is right (e.g. a negation the model ignored).

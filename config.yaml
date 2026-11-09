@@ -27,3 +27,21 @@ retrieval:
   rrf_k: 60                     # Reciprocal Rank Fusion constant
   candidates: 30                # fused candidates sent to the reranker
   top_k: 4                      # passages given to the LLM (UI slider default)
+
+llm:
+  backend: ollama               # ollama | openai | mock   (env LEXISYNC_LLM overrides)
+  ollama_model: qwen2.5:7b      # use qwen2.5:3b on an 8 GB Mac
+  ollama_host: http://localhost:11434
+  num_ctx: 8192
+  openai_model: gpt-4o-mini
+  openai_base_url: https://api.openai.com/v1
+
+answer:
+  abstain_threshold: 0.10       # best rerank relevance below this -> abstain, no LLM call
+  high_relevance: 0.70          # needed (with all claims verified) for HIGH confidence
+  low_relevance: 0.30           # below this -> LOW confidence
+  fuzzy_min: 85                 # rapidfuzz partial_ratio for a quote to count as found
+  overlap_min: 0.60             # ...or share of quote words present in the passage
+  quote_min_words: 5
+  quote_max_words: 25
+  max_attempts: 2               # verifier retries (reformulate, retrieve, regenerate)

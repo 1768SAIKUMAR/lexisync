@@ -1,7 +1,7 @@
 # One-command runs. Targets are added stage by stage.
 PY ?= python3
 
-.PHONY: setup model docs synthetic structure chunks index ask test
+.PHONY: setup model docs synthetic structure chunks index ask test answer
 
 setup:            ## install pinned dependencies
 	$(PY) -m pip install -r requirements.txt
@@ -30,3 +30,6 @@ index:            ## build the search index for data/docs (cached in data/index)
 
 ask:              ## compare all retrieval modes on one question: make ask Q="..."
 	$(PY) scripts/build_index.py --query "$(Q)"
+
+answer:           ## full pipeline (retrieval + LLM + verifier): make answer Q="..."
+	$(PY) -m lexisync.pipeline "$(Q)"
