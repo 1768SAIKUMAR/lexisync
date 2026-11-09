@@ -121,9 +121,16 @@ What this shows:
   without an LLM call.
 - **Hybrid + rerank beats dense alone** (75 % vs 60 %), and the **planner** adds 5 points of
   correctness and 6 points of citation precision.
-- **The verifier is a precision/recall trade-off**: same correctness, citation precision
-  75 % → 82 %, but one more correct answer was rejected (false abstention 6 % → 12 %).
-  For legal use we prefer "no answer" to an unsupported citation.
+- **The verifier raises citation precision** (75 % → 82 %) at the same correctness: it
+  removes claims whose quote or numbers are not in the cited passage.
+- **Error analysis of the two wrong refusals** (f02 lower fine tier, f04 definition of
+  consent): retrieval found the right passages, but the model itself answered "abstain"
+  (0 claims, 0 dropped, 1 try), so the verifier's retry loop never started. The same
+  questions were answered in other configurations, so this is model variability, not
+  missing evidence. Fix: a **second look** — when the model refuses although the best
+  passage relevance is ≥ 0.30, it is asked once more with the same passages and a note that
+  they were judged relevant; whatever it returns is still verified. Because this fix was
+  motivated by test-set errors, the held-out document is the honest check of it.
 - **k = 6 beats k = 4**: with only 4 passages two multi-hop questions lost evidence
   (false abstention 25 %).
 - Full report: `reports/main/report.md`; manual grades go in the `manual_correct` column of

@@ -170,12 +170,21 @@ def parse_json(text: str) -> dict:
             "explanation": "model output was not valid JSON", "conflicts": []}
 
 
-def build_prompt(question: str, hits: list[Hit]) -> str:
+SECOND_LOOK_NOTE = (
+    "Note: a relevance model judged these passages relevant to the question (best "
+    "relevance {rel:.2f}). Read them again carefully. If any passage states the answer, "
+    "even in different words, extract it as claims with verbatim quotes. Abstain only if "
+    "no passage answers the question.")
+
+
+def build_prompt(question: str, hits: list[Hit], note: str = "") -> str:
     parts = [f"Question: {question}", "", "Passages:"]
     for i, h in enumerate(hits, 1):
         c = h.chunk
         head = c.label + (f" — {c.title}" if c.title else "")
         parts.append(f"[C{i}] {head}\n{c.text}\n")
+    if note:
+        parts.append(note)
     parts.append("Return the JSON object now.")
     return "\n".join(parts)
 
@@ -305,6 +314,7 @@ def answer_question(question: str, index: Index, llm: LLM, cfg: dict, *,
     kept_hits: list[Hit] = []                 # passages backing verified claims
     last: dict = {}
     failed: list[Claim] = []
+    second_look = False                       # one re-read when the model refuses
     for attempt in range(1, (a["max_attempts"] if verify else 1) + 1):
         sr = index.search(query, mode=mode, k=k, doc_ids=doc_ids)
         timings["retrieval"] += sr.timings.get("retrieval", 0)
@@ -331,7 +341,8 @@ def answer_question(question: str, index: Index, llm: LLM, cfg: dict, *,
                 seen.add(h.chunk.chunk_id)
 
         # ----- 2-3. generate
-        r = llm.generate(SYSTEM_PROMPT, build_prompt(question, hits), ANSWER_SCHEMA)
+        note = SECOND_LOOK_NOTE.format(rel=res.best_relevance or 0) if second_look else ""
+        r = llm.generate(SYSTEM_PROMPT, build_prompt(question, hits, note), ANSWER_SCHEMA)
         timings["llm"] += r.ms
         tokens["prompt"] += r.prompt_tokens
         tokens["completion"] += r.completion_tokens
@@ -356,7 +367,16 @@ def answer_question(question: str, index: Index, llm: LLM, cfg: dict, *,
             "claims": len(claims), "verified": len(claims) - len(failed),
             "rejected": [{"claim": c.text, "reason": c.reason} for c in failed],
             "model_abstained": bool(last.get("abstain")),
+            "second_look": second_look,
         })
+        # ----- 4b. second look: the model refused although retrieval found clearly
+        # relevant passages (relevance >= low_relevance). Re-ask once with the same
+        # passages; the verifier still checks whatever comes back.
+        if (not claims and verify and not second_look and not verified
+                and attempt < a["max_attempts"]
+                and (res.best_relevance or 0) >= a["low_relevance"]):
+            second_look = True
+            continue
         if not failed or not verify:
             break
         # ----- 5. reformulate: question + the content words of the failed claims

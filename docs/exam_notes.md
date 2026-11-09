@@ -446,3 +446,22 @@ if a claim shows ✘ it was *dropped* — that is the verifier working, show it.
   exam.
 - **Limitations?** 7B model omits parts of long answers; slow on a laptop; complex tables and
   bad scans; threshold calibrated on one corpus.
+
+## Error analysis and the "second look" fix
+
+- **Symptom.** In the full system f02 (lower fine tier, Article 83(4)) and f04 (definition of
+  consent, Article 4(11)) ended as INSUFFICIENT EVIDENCE although retrieval had found the
+  right passages.
+- **Diagnosis from the run log.** `claims 0, dropped 0, tries 1`, reason "the model found no
+  answer in the passages". So the *model* refused; the verifier dropped nothing, and the
+  retry loop (which only reacts to rejected claims) never ran. The same questions were
+  answered in other configurations, so it is model variability, not missing evidence.
+  (Ollama on a Mac GPU is not bit-for-bit deterministic even with temperature 0 + seed.)
+- **Fix.** If the model returns no claims while the best relevance is ≥ 0.30 (clearly
+  relevant passages), ask once more with the same passages plus a note that a relevance
+  model judged them relevant. Safety is unchanged: (1) truly unanswerable questions are
+  stopped by the gate at 0.10 and never reach this, (2) whatever comes back still passes the
+  verifier (quote + numbers), so a pushed model cannot sneak in an invented claim (tested).
+- **Exam phrasing.** "I looked at the failures, found the cause in the logs, fixed that
+  specific failure mode, measured before/after, and checked on a held-out document that I
+  did not overfit."

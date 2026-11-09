@@ -141,7 +141,10 @@ def test_citing_a_non_existing_passage_fails(idx, cfg):
 
 
 def test_model_abstention_is_respected(idx, cfg):
-    r = answer_question(Q, idx, MockLLM([reply([], abstain=True)]), cfg, mode="hybrid_rerank")
+    # refuses on the first read and again on the second look -> abstain
+    llm = MockLLM([reply([], abstain=True), reply([], abstain=True)])
+    r = answer_question(Q, idx, llm, cfg, mode="hybrid_rerank")
+    assert len(llm.calls) <= 2
     assert r.abstained and r.abstain_reason == "the model found no answer in the passages"
 
 
@@ -201,3 +204,35 @@ def test_answer_without_markers_falls_back_to_verified_claims(idx, cfg):
         return out
     r = answer_question(Q, idx, MockLLM([nomarkers]), cfg, mode="hybrid_rerank")
     assert r.answer == "Fines can reach 20 000 000 EUR or 4 % of turnover (REG p. 2, Article 83(5))."
+
+
+# ------------------------------------------------------------ second look
+REFUSE = reply([], abstain=True)
+
+
+def test_second_look_when_model_refuses_relevant_passages(idx, cfg):
+    cfg["answer"]["low_relevance"] = 0.0              # retrieval counts as relevant
+    llm = MockLLM([REFUSE, good])
+    r = answer_question(Q, idx, llm, cfg, mode="hybrid_rerank")
+    assert len(llm.calls) == 2 and not r.abstained
+    assert "judged these passages relevant" in llm.calls[1]
+    assert "judged these passages relevant" not in llm.calls[0]
+    assert r.attempts[1]["second_look"] and r.attempts[1]["query"] == Q
+
+
+def test_no_second_look_when_relevance_is_low(idx, cfg):
+    cfg["answer"]["low_relevance"] = 1.01             # nothing counts as clearly relevant
+    llm = MockLLM([REFUSE, good])
+    r = answer_question(Q, idx, llm, cfg, mode="hybrid_rerank")
+    assert len(llm.calls) == 1 and r.abstained
+    assert r.abstain_reason == "the model found no answer in the passages"
+
+
+def test_second_look_answer_is_still_verified(idx, cfg):
+    cfg["answer"]["low_relevance"] = 0.0
+    def invented(prompt):
+        c = cid_of(prompt, "Article 83(5)")
+        return reply([{"text": "Fines can reach 50 000 000 EUR.", "citations": [c],
+                       "quote": "fines up to 50 000 000 EUR may be imposed"}])
+    r = answer_question(Q, idx, MockLLM([REFUSE, invented]), cfg, mode="hybrid_rerank")
+    assert r.abstained and not r.claims and len(r.dropped) == 1
