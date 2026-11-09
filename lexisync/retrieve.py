@@ -265,7 +265,8 @@ def fingerprint(paths: list[Path], cfg: dict, offline: bool) -> str:
         h.update(p.name.encode())
         h.update(hashlib.sha256(p.read_bytes()).digest())
     r = cfg["retrieval"]
-    h.update(json.dumps([INDEX_VERSION, offline, r["embed_model"]]).encode())
+    h.update(json.dumps([INDEX_VERSION, offline, r["embed_model"],
+                         cfg.get("doc_names", {})]).encode())
     return h.hexdigest()[:16]
 
 
@@ -284,7 +285,8 @@ def build_index(paths: list[Path], cfg: dict | None = None, cache: Path | None =
     for i, p in enumerate(paths):
         if progress:
             progress(i, len(paths), p.name)
-        doc = ingest_pdf(p, name=(names or {}).get(p.stem), cfg=cfg)
+        name = (names or {}).get(p.stem) or cfg.get("doc_names", {}).get(p.stem)
+        doc = ingest_pdf(p, name=name, cfg=cfg)
         docs.append(doc)
         chunks.extend(chunk_document(doc))
     idx = Index(chunks, docs, cfg)

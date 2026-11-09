@@ -318,3 +318,48 @@ threshold 0.10") and the list of documents searched.
 **Tests.** Streamlit AppTest runs the app headless with offline models + mock LLM:
 it starts, answers, shows claims/passages/citation, the docs table and the empty
 evaluation tab; a pixel test checks the highlight lands inside the box.
+
+**Second document check (ePrivacy Directive 2002/58/EC, 11 pages).** The 2002
+Official Journal is genuinely two-column: detected on all 11 pages, read
+column-by-column; 49/49 recitals and 21/21 articles found. That's the evidence
+that the two-column rule works on real input, not just synthetic tests.
+
+## Stage 6 — Evaluation (`eval/run_eval.py`)
+
+**Question set (`eval/questions.jsonl`, 20 questions).** 11 factual (8 GDPR,
+3 ePrivacy), 5 multi-hop (two paragraphs of one document, or two documents:
+m03 needs ePrivacy Art. 2(f) → GDPR Art. 94(2) → GDPR Art. 4(11)), 4 unanswerable.
+Gold = document + article + paragraph; key facts with "|" alternatives
+("20 000 000|20 million"). Every gold label and key fact was checked against the
+actual chunk text by script before running.
+
+**Retrieval metrics.** recall@k = share of a question's gold passages in the
+top k (a multi-hop question with 2 gold passages and 1 found scores 0.5);
+MRR = mean of 1/rank of the first gold passage. Reported at *paragraph* level
+(83(5) exactly) and *article* level (any part of Article 83).
+
+**Abstention threshold.** For every question the best cross-encoder relevance
+is logged; the report sweeps thresholds and counts unanswerable questions
+abstained vs answerable questions wrongly abstained. The chosen 0.10 must
+sit between the two groups.
+
+**End-to-end configurations** (ablations):
+`no_retrieval` (closed book, the mandatory baseline) · `dense_only` · `full`
+(hybrid + rerank + planner + verifier, k = 6) · `full_no_planner` ·
+`full_no_verifier` · `full_k4`.
+
+**Metrics.** Automatic correctness (all key facts present, not abstained;
+for unanswerable: abstained), a `manual_correct` column in answers.csv that I
+grade myself (0/1) and that survives re-runs, citation precision (share of cited
+passages in a gold article), abstention accuracy (unanswerable → abstained),
+false-abstention rate (answerable → abstained), latency (mean, p95), tokens.
+
+**Engineering.** Progress is appended to `runs/<config>.jsonl` after every
+question; `--resume` skips finished questions; `--summary-only` recomputes
+metrics after manual grading; `--tag` keeps before/after runs apart for the
+error analysis.
+
+**Held-out test (`eval/heldout.jsonl`).** 8 questions on a document never used
+during development (Basic Law of Germany), written before running; no
+changes to code or thresholds afterwards. This tests generalisation, which is
+the same situation as the exam's unseen PDF.

@@ -1,0 +1,8 @@
+{"id": "h01", "type": "factual", "question": "What does the Basic Law say about human dignity?", "gold": [{"doc": "basic_law", "section": "Article 1", "clause": "1(1)"}], "key_facts": ["inviolable"]}
+{"id": "h02", "type": "factual", "question": "From what age is a person entitled to vote in elections to the Bundestag?", "gold": [{"doc": "basic_law", "section": "Article 38", "clause": "38(2)"}], "key_facts": ["eighteen|18"]}
+{"id": "h03", "type": "factual", "question": "For how many years is the Bundestag elected?", "gold": [{"doc": "basic_law", "section": "Article 39", "clause": "39(1)"}], "key_facts": ["four years|4 years"]}
+{"id": "h04", "type": "factual", "question": "Is capital punishment permitted under the Basic Law?", "gold": [{"doc": "basic_law", "section": "Article 102", "clause": ""}], "key_facts": ["abolished"]}
+{"id": "h05", "type": "multihop", "question": "Who elects the Federal President, and how long is the term of office?", "gold": [{"doc": "basic_law", "section": "Article 54", "clause": "54(1)"}, {"doc": "basic_law", "section": "Article 54", "clause": "54(2)"}], "key_facts": ["Federal Convention", "five years|5 years"]}
+{"id": "h06", "type": "unanswerable", "question": "What is the speed limit on German motorways?", "gold": [], "key_facts": []}
+{"id": "h07", "type": "unanswerable", "question": "What is the maximum GDPR fine for infringing the basic principles of processing?", "gold": [], "key_facts": []}
+{"id": "h08", "type": "unanswerable", "question": "How many members does the Bundestag currently have?", "gold": [], "key_facts": []}

@@ -45,3 +45,9 @@ answer:
   quote_min_words: 5
   quote_max_words: 25
   max_attempts: 2               # verifier retries (reformulate, retrieve, regenerate)
+
+doc_names:                      # display names used in citation labels
+  gdpr: GDPR
+  eprivacy: ePrivacy
+  basic_law: Basic Law
+  ai_act: AI Act

@@ -190,18 +190,26 @@ with tab_ask:
             m[3].metric("Total", f"{t.get('total', 0) / 1000:.1f} s")
             m[4].metric("Tokens", f"{r.tokens.get('prompt', 0)} + {r.tokens.get('completion', 0)}")
 
+            st.subheader("Claim verification")
+            rows = [{"": "✅" if c.verified else "❌", "claim": c.text,
+                     "cited": "; ".join(c.labels), "quote": c.quote,
+                     "match": round(c.quote_score, 2), "attempt": c.attempt,
+                     "reason": c.reason or "verified"}
+                    for c in r.claims + r.dropped]
+            if rows:
+                st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch",
+                             column_config={
+                                 "": st.column_config.TextColumn(width=40),
+                                 "claim": st.column_config.TextColumn(width="large"),
+                                 "cited": st.column_config.TextColumn(width="medium"),
+                                 "quote": st.column_config.TextColumn(width="large"),
+                                 "match": st.column_config.NumberColumn(width=60),
+                                 "attempt": st.column_config.NumberColumn(width=60)})
+            else:
+                st.caption("No claims (abstained before or after generation).")
+
             left, right = st.columns([1, 1])
             with left:
-                st.subheader("Claim verification")
-                rows = [{"": "✅" if c.verified else "❌", "claim": c.text,
-                         "cited": "; ".join(c.labels), "quote": c.quote,
-                         "match": round(c.quote_score, 2), "attempt": c.attempt,
-                         "reason": c.reason or "verified"}
-                        for c in r.claims + r.dropped]
-                if rows:
-                    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
-                else:
-                    st.caption("No claims (abstained before or after generation).")
                 if len(r.attempts) > 1 or any(a.get("rejected") for a in r.attempts):
                     with st.expander(f"Verifier retry log ({len(r.attempts)} attempts)"):
                         st.json(r.attempts)
