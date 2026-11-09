@@ -20,6 +20,7 @@ def app(pdfs, tmp_path, monkeypatch):
     monkeypatch.setenv("LEXISYNC_OFFLINE", "1")
     monkeypatch.setenv("LEXISYNC_CASES", str(tmp_path / "cases"))
     monkeypatch.setenv("LEXISYNC_SEED", str(seed))
+    monkeypatch.setenv("LEXISYNC_REPORTS", str(tmp_path / "reports"))   # isolated
     at = AppTest.from_file(APP, default_timeout=60)
     at.run()
     assert not at.exception, at.exception
@@ -55,3 +56,30 @@ def test_documents_tab_reports_structure(app):
 
 def test_evaluation_tab_without_results(app):
     assert any("No evaluation yet" in i.value for i in app.info)
+
+
+def test_evaluation_tab_renders_real_summary(pdfs, tmp_path, monkeypatch):
+    """A summary with paragraph- AND article-level keys (recall@1_article) must render."""
+    import json
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    shutil.copy(pdfs["eu_regulation.pdf"], seed / "reg.pdf")
+    rep = tmp_path / "reports"
+    rep.mkdir()
+    retrieval = {m: {"recall@1": .5, "recall@1_article": .6, "recall@3": .7,
+                     "recall@3_article": .8, "mrr": .6, "mrr_article": .7}
+                 for m in ("bm25", "dense")}
+    cfgs = {"full": {"n": 2, "correctness": .5, "manual_correctness": None,
+                     "citation_precision": 1.0, "abstention_accuracy": 1.0,
+                     "false_abstention_rate": 0.0, "latency_s": 20.0, "tokens": 900}}
+    (rep / "eval_summary.json").write_text(json.dumps(
+        {"timestamp": "t", "n_questions": 2, "llm": "mock", "headline": "full",
+         "configs": cfgs, "retrieval": retrieval}))
+    monkeypatch.setenv("LEXISYNC_OFFLINE", "1")
+    monkeypatch.setenv("LEXISYNC_CASES", str(tmp_path / "cases"))
+    monkeypatch.setenv("LEXISYNC_SEED", str(seed))
+    monkeypatch.setenv("LEXISYNC_REPORTS", str(rep))
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.run()
+    assert not at.exception, at.exception
+    assert any("Retrieval recall@k" in s.value for s in at.subheader)

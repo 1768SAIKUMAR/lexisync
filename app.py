@@ -26,7 +26,7 @@ from lexisync.retrieve import MODES, build_index
 
 CASES = Path(os.environ.get("LEXISYNC_CASES", ROOT / "data" / "cases"))
 SEED = Path(os.environ.get("LEXISYNC_SEED", ROOT / "data" / "docs"))
-REPORTS = ROOT / "reports"
+REPORTS = Path(os.environ.get("LEXISYNC_REPORTS", ROOT / "reports"))
 BADGE = {"HIGH": ("#0F6E56", "#E1F5EE"), "MEDIUM": ("#854F0B", "#FAEEDA"),
          "LOW": ("#993C1D", "#FAECE7"), "INSUFFICIENT EVIDENCE": ("#A32D2D", "#FCEBEB")}
 EXAMPLES = [
@@ -332,9 +332,9 @@ with tab_eval:
             st.subheader("Latency per question (s)")
             st.bar_chart(cfgs[["latency_s"]])
         if "retrieval" in s:
-            st.subheader("Retrieval recall@k")
-            rec = pd.DataFrame({m: {int(k_.split("@")[1]): v for k_, v in d.items()
-                                    if k_.startswith("recall@")}
+            st.subheader("Retrieval recall@k (paragraph level)")
+            rec = pd.DataFrame({m: {int(mt.group(1)): v for k_, v in d.items()
+                                    if (mt := re.fullmatch(r"recall@(\d+)", k_))}
                                 for m, d in s["retrieval"].items()})
             st.line_chart(rec.sort_index())
             st.dataframe(pd.DataFrame(s["retrieval"]).T, width="stretch")
