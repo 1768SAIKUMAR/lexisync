@@ -6,3 +6,4 @@ data/index/
 data/docs/*.pdf
 reports/*.jsonl
 .DS_Store
+data/cases/

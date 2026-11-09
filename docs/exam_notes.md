@@ -272,3 +272,49 @@ responses make every branch of the verifier testable).
 (< 1 ms), explainable in one sentence, and can't itself hallucinate. Limitation:
 it checks that the quote exists and the numbers match, not that the claim's
 *interpretation* of the quote is right (e.g. a negation the model ignored).
+
+**Real-model fix after the first run.** qwen2.5:7b answered only the 83(5) tier
+and wrote a second sentence ("applies to basic principles, data subjects'
+rights…") with no [C#] marker, so it was shown unverified. Fixes: the prompt asks
+for one claim per fact and every tier as its own claim; `grounded_answer()` shows
+only answer sentences that carry a [C#] marker pointing at a passage backing a
+verified claim, with all numbers present in that passage; otherwise the answer
+is rebuilt from the verified claims. A good example for "what did you learn from
+error analysis".
+
+## Stage 5 — UI (`app.py`, `lexisync/render.py`)
+
+**Layout (assignment §2 flow).** Sidebar: case (create/select), documents to
+search, retrieval mode, passages slider (default 4), verifier toggle,
+no-retrieval baseline toggle, LLM (Ollama / mock fallback if Ollama is down).
+Tabs: **Ask** · **Documents & structure** · **Evaluation**.
+
+**Cases.** A case = a folder `data/cases/<name>/docs/*.pdf` + its own index
+cache. First launch seeds a "gdpr-demo" case from `data/docs`. Upload or URL
+adds PDFs; the index rebuilds automatically when files change (cache key =
+file paths + modification times; plus the content fingerprint in Stage 3).
+
+**Ask tab shows** the confidence badge, the answer with citations, citation chips,
+the "why this evidence supports it" explanation, missing parts, conflicts,
+timings (retrieval / rerank / LLM / total) and tokens, the claim verification
+table (✅/❌, cited label, quote, match score, attempt, reason), the verifier retry
+log, the planner's sub-queries, every retrieved passage with relevance and
+BM25/dense ranks, and **the cited PDF page with the cited region highlighted**.
+
+**Highlighting (`render.py`).** The bbox of each block survives from ingestion
+→ chunk.bboxes → here. Render the page at zoom z (points → pixels ×z), draw a
+translucent yellow rectangle per box, optional crop to the region. Because the
+chunk is one clause, the highlight covers exactly 83(5) with its points
+(a)–(e) and stops before paragraph 6 (bonus feature 4: bounding-box citations).
+
+**Model loading.** Encoder, reranker and LLM client are created once per process
+(`embed._CACHE`, `st.cache_resource`), so the first question takes seconds and
+later ones only retrieval + LLM time.
+
+**Abstention is visible** (graded under "Functional UI"): red INSUFFICIENT
+EVIDENCE badge, the reason (e.g. "best passage relevance 0.00 is below the
+threshold 0.10") and the list of documents searched.
+
+**Tests.** Streamlit AppTest runs the app headless with offline models + mock LLM:
+it starts, answers, shows claims/passages/citation, the docs table and the empty
+evaluation tab; a pixel test checks the highlight lands inside the box.

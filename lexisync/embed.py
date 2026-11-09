@@ -130,15 +130,26 @@ class KeywordReranker:
 
 
 # ------------------------------------------------------------------ factory
+# Models are loaded once per process and shared (UI cases, evaluation runs):
+# loading bge + the cross-encoder takes seconds, a query takes milliseconds.
+_CACHE: dict[tuple, object] = {}
+
+
 def get_encoder(cfg: dict) -> Encoder:
     r = cfg["retrieval"]
     if offline_mode() or r.get("offline"):
         return HashingEncoder()
-    return STEncoder(r["embed_model"], r["query_prefix"], seed=cfg["seed"])
+    key = ("enc", r["embed_model"], r["query_prefix"])
+    if key not in _CACHE:
+        _CACHE[key] = STEncoder(r["embed_model"], r["query_prefix"], seed=cfg["seed"])
+    return _CACHE[key]
 
 
 def get_reranker(cfg: dict) -> Reranker:
     r = cfg["retrieval"]
     if offline_mode() or r.get("offline"):
         return KeywordReranker()
-    return CrossEncoderReranker(r["reranker_model"])
+    key = ("rr", r["reranker_model"])
+    if key not in _CACHE:
+        _CACHE[key] = CrossEncoderReranker(r["reranker_model"])
+    return _CACHE[key]

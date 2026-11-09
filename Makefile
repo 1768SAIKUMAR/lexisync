@@ -1,7 +1,7 @@
 # One-command runs. Targets are added stage by stage.
 PY ?= python3
 
-.PHONY: setup model docs synthetic structure chunks index ask test answer
+.PHONY: setup model docs synthetic structure chunks index ask test answer app
 
 setup:            ## install pinned dependencies
 	$(PY) -m pip install -r requirements.txt
@@ -33,3 +33,6 @@ ask:              ## compare all retrieval modes on one question: make ask Q="..
 
 answer:           ## full pipeline (retrieval + LLM + verifier): make answer Q="..."
 	$(PY) -m lexisync.pipeline "$(Q)"
+
+app:              ## start the web UI on http://localhost:8501
+	$(PY) -m streamlit run app.py
