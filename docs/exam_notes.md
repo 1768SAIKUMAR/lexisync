@@ -465,3 +465,6 @@ if a claim shows ✘ it was *dropped* — that is the verifier working, show it.
 - **Exam phrasing.** "I looked at the failures, found the cause in the logs, fixed that
   specific failure mode, measured before/after, and checked on a held-out document that I
   did not overfit."
+- **Measured.** Before → after (full system, 20 questions): correct 75 % → 80 %, false
+  abstention 12 % → 6 %, citation precision 82 % → 83 %, unanswerable still 4/4, latency
+  +4 s. f02 fixed; f04 still refused (honest remaining weakness).

@@ -113,6 +113,7 @@ and 0/16 answerable questions were wrongly abstained (chosen threshold 0.10).
 | full without planner | 70 % | 76 % | 100 % | 12 % | 31 s |
 | full without verifier | 75 % | 75 % | 100 % | 6 % | 24 s |
 | full with k = 4 | 70 % | 81 % | 100 % | 25 % | 29 s |
+| **full + second look (final)** | **80 %** | **83 %** | **100 %** | **6 %** | 32 s |
 
 What this shows:
 - **Retrieval is essential**: without documents the model is right 35 % of the time and
@@ -129,8 +130,12 @@ What this shows:
   questions were answered in other configurations, so this is model variability, not
   missing evidence. Fix: a **second look** — when the model refuses although the best
   passage relevance is ≥ 0.30, it is asked once more with the same passages and a note that
-  they were judged relevant; whatever it returns is still verified. Because this fix was
-  motivated by test-set errors, the held-out document is the honest check of it.
+  they were judged relevant; whatever it returns is still verified. **Result:** correct
+  75 % → 80 %, false abstention 12 % → 6 %, citation precision 82 % → 83 %, still 4/4
+  unanswerable refused; cost +4 s average latency. f02 is now answered; f04 (definition of
+  consent) is still refused after the second look — a remaining 7B-model weakness.
+  Because this fix was motivated by test-set errors, the held-out document is the honest
+  check of it (`reports/fix/` holds the after-run, `reports/main/` the before-run).
 - **k = 6 beats k = 4**: with only 4 passages two multi-hop questions lost evidence
   (false abstention 25 %).
 - Full report: `reports/main/report.md`; manual grades go in the `manual_correct` column of
