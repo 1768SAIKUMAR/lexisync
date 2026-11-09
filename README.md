@@ -113,7 +113,8 @@ and 0/16 answerable questions were wrongly abstained (chosen threshold 0.10).
 | full without planner | 70 % | 76 % | 100 % | 12 % | 31 s |
 | full without verifier | 75 % | 75 % | 100 % | 6 % | 24 s |
 | full with k = 4 | 70 % | 81 % | 100 % | 25 % | 29 s |
-| **full + second look (final)** | **80 %** | **83 %** | **100 %** | **6 %** | 32 s |
+| full + second look | 80 % | 83 % | 100 % | 6 % | 32 s |
+| **final (+ cut-off handling)** | **85 %** | 79 % | **100 %** | **0 %** | **28 s** |
 
 What this shows:
 - **Retrieval is essential**: without documents the model is right 35 % of the time and
@@ -124,18 +125,20 @@ What this shows:
   correctness and 6 points of citation precision.
 - **The verifier raises citation precision** (75 % → 82 %) at the same correctness: it
   removes claims whose quote or numbers are not in the cited passage.
-- **Error analysis of the two wrong refusals** (f02 lower fine tier, f04 definition of
-  consent): retrieval found the right passages, but the model itself answered "abstain"
-  (0 claims, 0 dropped, 1 try), so the verifier's retry loop never started. The same
-  questions were answered in other configurations, so this is model variability, not
-  missing evidence. Fix: a **second look** — when the model refuses although the best
-  passage relevance is ≥ 0.30, it is asked once more with the same passages and a note that
-  they were judged relevant; whatever it returns is still verified. **Result:** correct
-  75 % → 80 %, false abstention 12 % → 6 %, citation precision 82 % → 83 %, still 4/4
-  unanswerable refused; cost +4 s average latency. f02 is now answered; f04 (definition of
-  consent) is still refused after the second look — a remaining 7B-model weakness.
-  Because this fix was motivated by test-set errors, the held-out document is the honest
-  check of it (`reports/fix/` holds the after-run, `reports/main/` the before-run).
+- **Error analysis of the wrong refusals** (f02 lower fine tier, f04 definition of consent):
+  retrieval had found the right passages, yet the result was "the model found no answer".
+  A first fix (a **second look** when the model refuses although relevance ≥ 0.30) gave
+  75 % → 80 %. The real root cause showed up later in the UI: the token counter read exactly
+  2 × 1024 — the model's JSON was **cut off at the output-token limit**, and invalid JSON had
+  been treated as a refusal. Final fix: detect truncation, keep every complete claim written
+  before the cut (claims come first in the JSON, and they are still verified), ask for a
+  shorter answer if nothing survived, add a brevity rule to the prompt, and report the true
+  reason. **Final result: 85 % correct, 16/16 answerable questions answered (0 % false
+  abstention), 4/4 unanswerable refused, 28 s average.** Citation precision moved from
+  83 % to 79 % because more questions are now answered and some answers also cite a
+  neighbouring article. Because these fixes were motivated by test-set errors, the
+  held-out document is the honest check (`reports/main` = before, `reports/fix` = second
+  look, `reports/final` = final).
 - **k = 6 beats k = 4**: with only 4 passages two multi-hop questions lost evidence
   (false abstention 25 %).
 - Full report: `reports/main/report.md`; manual grades go in the `manual_correct` column of

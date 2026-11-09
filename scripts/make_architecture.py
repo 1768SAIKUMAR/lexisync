@@ -14,7 +14,7 @@ RESULTS = [
     "20 questions (11 factual, 5 multi-hop incl. 3 cross-document, 4 unanswerable) + held-out "
     "set on an unseen document · recall@1/3/5/10 + MRR per retrieval mode",
     "recall@3: BM25 0.61 · dense 0.77 · hybrid 0.71 · +rerank 0.83 · +planner 0.93 (MRR 0.93) · OCR CER 3.2 %",
-    "end-to-end correct: closed-book 35 % · dense-only 60 % · full 75 % → 80 % with second look (cit. precision 83 %) "
+    "end-to-end correct: closed-book 35 % · dense-only 60 % · full 75 % → 85 % after error analysis, 0 % false refusals "
     "· unanswerable abstained 4/4 · held-out Basic Law: 7/8 correct, 3/3 refused",
 ]
 

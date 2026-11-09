@@ -502,3 +502,8 @@ if a claim shows ✘ it was *dropped* — that is the verifier working, show it.
   5. The reason shown is now honest: "output was cut off at the token limit".
 - **Exam lesson:** "The UI's token counter showed exactly twice the limit — the metric told
   me the cause. Observability (timings, tokens, retry log) is part of the design."
+- **Measured after the cut-off fix (full system, 20 questions):** 85 % correct, 16/16
+  answerable answered (false abstention 0 %), 4/4 unanswerable refused, 28 s average
+  (faster, because no more 1024-token runaways). Citation precision 79 % (was 83 %): more
+  answers, some also citing a neighbouring article. Story: 75 % → 80 % (second look) →
+  85 % (real root cause fixed).
