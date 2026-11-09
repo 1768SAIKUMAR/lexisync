@@ -179,3 +179,25 @@ def test_result_serialises(idx, cfg):
     d = r.to_dict()
     json.dumps(d)
     assert d["passages"][0]["label"] and "llm" in d["timings"]
+
+
+def test_unmarked_or_unbacked_sentences_are_not_shown(idx, cfg):
+    def chatty(prompt):
+        out = good(prompt)
+        c = out["claims"][0]["citations"][0]
+        out["answer"] = (f"Fines can reach 20 000 000 EUR [{c}]. "
+                         "It also applies to all cats in Europe. "            # no marker
+                         f"The fine is 99 EUR [{c}].")                         # bad number
+        return out
+    r = answer_question(Q, idx, MockLLM([chatty]), cfg, mode="hybrid_rerank")
+    assert "20 000 000 EUR (REG p. 2, Article 83(5))" in r.answer
+    assert "cats" not in r.answer and "99" not in r.answer
+
+
+def test_answer_without_markers_falls_back_to_verified_claims(idx, cfg):
+    def nomarkers(prompt):
+        out = good(prompt)
+        out["answer"] = "Up to 20 million euros, and it covers many violations."
+        return out
+    r = answer_question(Q, idx, MockLLM([nomarkers]), cfg, mode="hybrid_rerank")
+    assert r.answer == "Fines can reach 20 000 000 EUR or 4 % of turnover (REG p. 2, Article 83(5))."

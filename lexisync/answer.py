@@ -33,19 +33,25 @@ from .retrieve import Hit, Index
 SYSTEM_PROMPT = """You are a careful legal analyst. Answer ONLY from the numbered passages.
 
 Rules:
-1. Every claim must cite at least one passage id, e.g. ["C2"], and include an exact
-   quote of 5-25 words copied character-for-character from that passage.
+1. Make ONE claim per fact. Every claim must cite at least one passage id, e.g.
+   ["C2"], and include an exact quote of 5-25 words copied character-for-character
+   from that passage.
 2. Use only facts stated in the passages. No outside knowledge, no guessing.
 3. Copy numbers, amounts, percentages and dates exactly as written. Never swap
    numbers between passages or between a rule and its exception.
 4. Keep the default rule and its exceptions apart; say which is which.
-5. If passages disagree, report it in "conflicts" and say which source you used.
-6. If only part of the question is answered, answer that part and list the
-   unanswered parts in "missing".
-7. If the passages do not answer the question at all, return no claims and set
+5. Answer EVERY part of the question. If the passages give several amounts, tiers,
+   deadlines or conditions (e.g. a lower and a higher fine), give each one as its
+   own claim with its own citation.
+6. "conflicts": only when two passages state DIFFERENT values for the same thing;
+   say which source you used. Otherwise an empty list.
+7. "missing": only parts of the question that NO passage addresses. Otherwise an
+   empty list.
+8. If the passages do not answer the question at all, return no claims and set
    "abstain": true.
-8. "answer": plain-language answer, 1-4 sentences, with [C#] markers after facts.
-9. "explanation": one or two sentences on why the cited evidence supports the answer.
+9. "answer": plain-language answer, 1-5 sentences. EVERY sentence must end with the
+   [C#] marker(s) of the passage(s) it comes from.
+10. "explanation": one or two sentences on why the cited evidence supports the answer.
 
 Write the JSON fields in this order: claims, answer, missing, abstain, explanation,
 conflicts."""
@@ -225,6 +231,29 @@ def _with_labels(text: str, hits: list[Hit]) -> str:
     return re.sub(r"\[(?:C\d+(?:\s*,\s*)?)+\]", sub, text).replace(" .", ".").strip()
 
 
+def grounded_answer(text: str, hits: list[Hit], claims: list[Claim]) -> str:
+    """Keep only answer sentences that (a) carry a [C#] marker pointing at a passage
+    that backs a verified claim and (b) contain no number missing from those
+    passages. The model's free text is never shown unchecked."""
+    by_id = {f"C{i}": h.chunk for i, h in enumerate(hits, 1)}
+    backing = {cid for c in claims for cid in c.chunk_ids}
+    kept = []
+    for sent in re.split(r"(?<=[.!?])\s+(?=[A-Z(])", text.strip()):
+        ids = re.findall(r"C\d+", " ".join(re.findall(r"\[[^\]]*\]", sent)))
+        chunks = [by_id[i] for i in ids if i in by_id and by_id[i].chunk_id in backing]
+        if not chunks:
+            continue
+        nums = numbers_in(sent)
+        if nums and not nums <= set().union(*(numbers_in(index_text(c)) for c in chunks)):
+            continue
+        kept.append(sent)
+    return _with_labels(" ".join(kept), hits) if kept else ""
+
+
+def _claims_answer(claims: list[Claim]) -> str:
+    return " ".join(f"{c.text.rstrip('.')} ({'; '.join(c.labels)})." for c in claims)
+
+
 def _confidence(claims: list[Claim], dropped: list[Claim], rel: float | None,
                 missing: list[str], cfg: dict) -> str:
     a = cfg["answer"]
@@ -350,11 +379,11 @@ def answer_question(question: str, index: Index, llm: LLM, cfg: dict, *,
         res.confidence = INSUFFICIENT
     else:
         res.abstained = False
-        if res.dropped:      # never show text that rests on rejected claims
-            res.answer = " ".join(f"{c.text} ({'; '.join(c.labels)})" for c in res.claims)
-        else:
-            res.answer = _with_labels(str(last.get("answer", "")), res.passages) or \
-                " ".join(f"{c.text} ({'; '.join(c.labels)})" for c in res.claims)
+        # every displayed sentence must be backed; otherwise use the verified claims
+        res.answer = ("" if res.dropped else
+                      grounded_answer(str(last.get("answer", "")), res.passages, res.claims))
+        if not res.answer:
+            res.answer = _claims_answer(res.claims)
         res.confidence = _confidence(res.claims, res.dropped, res.best_relevance,
                                      res.missing, cfg)
     res.timings = {**timings, "total": (time.perf_counter() - t_start) * 1000}
