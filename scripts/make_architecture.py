@@ -13,11 +13,12 @@ ROOT = Path(__file__).resolve().parent.parent
 RESULTS = [
     "20 questions (11 factual, 5 multi-hop incl. 3 cross-document, 4 unanswerable) + held-out "
     "set on an unseen document · recall@1/3/5/10 + MRR per retrieval mode",
-    "recall@3: BM25 0.61 · dense 0.77 · hybrid 0.71 · +rerank 0.83 · +planner 0.93 (MRR 0.93) "
-    "· gate: 4/4 unanswerable abstained, 0/16 false · OCR CER 3.2 %",
+    "recall@3: BM25 0.61 · dense 0.77 · hybrid 0.71 · +rerank 0.83 · +planner 0.93 (MRR 0.93) · OCR CER 3.2 %",
+    "end-to-end correct: closed-book 35 % · dense-only 60 % · full 75 % (citation precision 82 %) "
+    "· unanswerable abstained 4/4 (closed-book 3/4)",
 ]
 
-W, H = 1600, 1000
+W, H = 1600, 1030
 IDX = ("#E1F5EE", "#0F6E56", "#085041")
 ANS = ("#EEEDFE", "#534AB7", "#3C3489")
 SAFE = ("#FAECE7", "#993C1D", "#712B13")

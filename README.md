@@ -103,10 +103,31 @@ structure check found 99/99 GDPR articles, 173/173 recitals, 21/21 ePrivacy arti
 Abstention gate: at every threshold from 0.01 to 0.30, 4/4 unanswerable questions abstained
 and 0/16 answerable questions were wrongly abstained (chosen threshold 0.10).
 
-**End-to-end** (six configurations: closed-book LLM, dense-only, full system, full without
-planner, full without verifier, full with k = 4): see `reports/main/report.md` after
-`make eval`. Correctness is scored automatically by key facts and checked by hand in the
-`manual_correct` column of `reports/main/answers.csv`.
+**End-to-end** (20 questions, qwen2.5:7b, automatic key-fact scoring):
+
+| configuration | correct | citation precision | abstention accuracy (4 unanswerable) | false abstention (16 answerable) | latency |
+|---|---|---|---|---|---|
+| closed-book LLM (no retrieval) | 35 % | – | 75 % | 44 % | 16 s |
+| dense retrieval only | 60 % | 76 % | 100 % | 19 % | 33 s |
+| full system (hybrid + rerank + planner + verifier, k = 6) | **75 %** | **82 %** | **100 %** | 12 % | 28 s |
+| full without planner | 70 % | 76 % | 100 % | 12 % | 31 s |
+| full without verifier | 75 % | 75 % | 100 % | 6 % | 24 s |
+| full with k = 4 | 70 % | 81 % | 100 % | 25 % | 29 s |
+
+What this shows:
+- **Retrieval is essential**: without documents the model is right 35 % of the time and
+  invented an answer for one unanswerable question; with the full pipeline 75 % and no
+  invented answers. The four unanswerable questions are stopped by the gate in ~0.3 s,
+  without an LLM call.
+- **Hybrid + rerank beats dense alone** (75 % vs 60 %), and the **planner** adds 5 points of
+  correctness and 6 points of citation precision.
+- **The verifier is a precision/recall trade-off**: same correctness, citation precision
+  75 % → 82 %, but one more correct answer was rejected (false abstention 6 % → 12 %).
+  For legal use we prefer "no answer" to an unsupported citation.
+- **k = 6 beats k = 4**: with only 4 passages two multi-hop questions lost evidence
+  (false abstention 25 %).
+- Full report: `reports/main/report.md`; manual grades go in the `manual_correct` column of
+  `reports/main/answers.csv` (then `python eval/run_eval.py --summary-only`).
 
 **OCR** (synthetic scanned pages with known text, 200 dpi): mean character error rate 3.2 %,
 word error rate 3.5 %; clause-number recall on the hardest page improved from 12 % to 88 %
