@@ -370,3 +370,79 @@ stuck emitting whitespace and never close the object. Fixes: `num_predict` =
 1024 tokens per answer (normal answers use ~350), a 180 s timeout with a clear
 error, and the evaluation retries a failed question once, then records it as
 an ERROR (counted as wrong, not as an abstention) and continues.
+
+## Stage 7 — Engineering (Makefile, Docker, CI, diagram)
+
+**What it is.** Everything that makes the project reproducible by someone else.
+
+- **Pinned `requirements.txt`** — exact versions, so the same code gives the same result next
+  month. **`config.yaml`** holds every number we tuned plus `seed: 42` (LLM seed, numpy, torch).
+- **Makefile** — one short command per task (`make test`, `make app`, `make eval`, `make help`).
+  It is documentation that runs.
+- **Dockerfile** — `python:3.12-slim` + Tesseract + CPU-only torch; the embedding and reranker
+  models are downloaded at build time so the container works offline. **docker-compose** runs
+  two services: `ollama` (the LLM server) and `app`; the app finds Ollama via
+  `OLLAMA_HOST_URL=http://ollama:11434` (inside Docker, `localhost` would be the app itself).
+- **GitHub Actions CI** (`.github/workflows/ci.yml`) — on every push: Ubuntu, Python 3.12,
+  Tesseract, then `pytest` with `LEXISYNC_OFFLINE=1` and `LEXISYNC_LLM=mock`. Why offline/mock?
+  CI has no GPU and no 4.7 GB model; the tests check *our logic* (chunking, fusion, verifier,
+  abstention) with small stand-ins and a scripted LLM, so they are fast and deterministic.
+- **OCR benchmark** (`scripts/ocr_benchmark.py`) — synthetic scanned pages whose true text we
+  know. CER = character edit distance / length; WER = the same for words. Results at 200 dpi:
+  **CER 3.2 %, WER 3.5 %** (150 dpi 4.2 %, 300 dpi 3.5 % — 200 dpi is the speed/accuracy
+  sweet spot). Clause-number recall on page 2 was 12 %: Tesseract's automatic layout mode
+  (psm 3) treated the margin numbers "(1)", "(2)" as a separate column and dropped them. Fix:
+  run psm 3 and psm 6 (one uniform block) and keep the result with more clause starts → 88 %.
+- **Architecture diagram** — `scripts/make_architecture.py` draws it from code (SVG → PDF/PNG),
+  so the numbers on it can be updated after the final evaluation.
+
+## Exam demo script (5 minutes)
+
+1. **(0:00) Start** — `make app` already running, Ollama running, "Mock" NOT selected.
+   Create a new case "exam", upload the examiner's PDF (or paste its URL).
+2. **(0:30) Structure report** — Documents tab: "it detected N pages, two-column on pages …,
+   tables on …, headers removed, OCR on …". This shows the ingestion is not blind.
+3. **(1:00) Prose question** — ask it. Point at: the answer, the citation chips
+   ("p. 12, Article 5(2)"), the confidence badge, the claim table (every claim ✔ verified,
+   with its quote), and the highlighted region on the rendered page.
+4. **(2:00) Two-page multi-hop question** — show the planner split ("searched as 2 parts"),
+   two citations on two different pages, open both highlighted pages.
+5. **(3:30) Unanswerable question** — INSUFFICIENT EVIDENCE in ~0.3 s, best relevance ≈ 0,
+   "no LLM call was made"; list of documents searched. Say: *"it refuses rather than guess."*
+6. **(4:30) Close** — point at the diagram: gate → LLM → verifier → citations.
+
+If something goes wrong: a slow answer is the 7B model on a laptop (say so, keep talking);
+if a claim shows ✘ it was *dropped* — that is the verifier working, show it.
+
+## Likely theory questions (short answers)
+
+- **Why hybrid retrieval?** BM25 is exact on legal references and rare words ("83(5)", "Article
+  17"); dense finds paraphrases ("right to be forgotten" ↔ "erasure"). They fail on different
+  questions, so fusing them recovers more (R@10 0.95 vs 0.89 / 0.93).
+- **Why RRF instead of adding scores?** BM25 scores (0–30) and cosine (0–1) are on different
+  scales; RRF uses only ranks: score = Σ 1/(60 + rank). No normalisation, robust.
+- **Bi-encoder vs cross-encoder?** Bi-encoder embeds query and passage separately → fast,
+  pre-computable, used for search over all chunks. Cross-encoder reads both together with full
+  attention → much more accurate but one forward pass per pair, so only on the top 30.
+- **Why does hybrid alone have lower R@1 than BM25?** Fusion promotes passages that are
+  "OK in both" over one that is perfect in one; the reranker fixes the order (R@1 0.44 → 0.62).
+- **How do you prevent hallucination?** (1) gate before the LLM, (2) prompt: passages only,
+  each claim needs a passage id + verbatim quote, (3) code verifier: fuzzy quote match ≥ 85
+  and exact number match, (4) only verified sentences shown, (5) abstain if nothing survives.
+  The LLM is never trusted on its own word.
+- **Why temperature 0 and a seed?** Reproducible answers — the same question gives the same
+  answer, which evaluation and an exam demo need.
+- **Why JSON with "abstain" last?** The model writes claims first, then decides; deciding
+  "abstain" before looking at the evidence makes it refuse too easily or too rarely.
+- **Why clause-aware chunks instead of fixed 500 tokens?** A fixed window cuts "Article 83(5)"
+  in half and the citation becomes wrong; legal text is already divided into units that
+  people cite, so we use them.
+- **What is recall@k / MRR?** recall@k: fraction of questions whose gold passage is in the
+  top k. MRR: mean of 1/rank of the first correct passage (1.0 = always first).
+- **What does the ablation show?** Removing one component at a time (planner, verifier,
+  reranker) and measuring the drop proves each component earns its place.
+- **What is the held-out test for?** All thresholds were tuned on GDPR/ePrivacy; the Basic Law
+  test, run once without retuning, estimates how it does on an unseen document — like the
+  exam.
+- **Limitations?** 7B model omits parts of long answers; slow on a laptop; complex tables and
+  bad scans; threshold calibrated on one corpus.

@@ -158,5 +158,6 @@ def get_llm(cfg: dict) -> LLM:
         return MockLLM()
     if backend == "openai":
         return OpenAICompatLLM(c["openai_model"], c["openai_base_url"], seed=cfg["seed"])
-    return OllamaLLM(c["ollama_model"], c["ollama_host"], seed=cfg["seed"], num_ctx=c["num_ctx"],
+    host = os.environ.get("OLLAMA_HOST_URL", c["ollama_host"])     # Docker: http://ollama:11434
+    return OllamaLLM(c["ollama_model"], host, seed=cfg["seed"], num_ctx=c["num_ctx"],
                      timeout=c.get("timeout_s", 180), max_tokens=c.get("max_tokens", 1024))

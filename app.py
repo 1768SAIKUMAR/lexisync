@@ -75,7 +75,8 @@ def files_key(paths: list[Path]) -> tuple:
 
 def ollama_ok() -> bool:
     try:
-        return requests.get(cfg["llm"]["ollama_host"] + "/api/tags", timeout=1).ok
+        host = os.environ.get("OLLAMA_HOST_URL", cfg["llm"]["ollama_host"])
+        return requests.get(host + "/api/tags", timeout=1).ok
     except requests.RequestException:
         return False
 

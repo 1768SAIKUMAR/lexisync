@@ -225,19 +225,20 @@ def _ocr_lines(page: pymupdf.Page, dpi: int, psm: int) -> list[tuple[str, BBox, 
 
 
 def ocr_page(page: pymupdf.Page, dpi: int) -> tuple[list[tuple[str, BBox, float]], int]:
-    """OCR with automatic layout (psm 3). If no clause numbers survive but the
-    text looks legal, re-run as one uniform block (psm 6), which keeps line
-    starts like "1." or "(2)" attached, and keep whichever finds more clauses."""
+    """OCR twice and keep the run that preserves more clause numbers.
+
+    psm 3 (automatic page segmentation) treats numbers hanging in the left
+    margin - recital "(4)", paragraph "1." - as a separate column and drops or
+    detaches them; psm 6 ("one uniform block of text") keeps "(4) The ..." on
+    one line. Chunking depends on those numbers, so we run both and keep the
+    one with more clause starts (tie -> psm 3, the better general layout).
+    Measured on GDPR p. 2: clause-number recall 12 % (psm 3) vs ~100 % (psm 6).
+    Doubles OCR time, but only for scanned pages."""
     best = _ocr_lines(page, dpi, psm=3)
-    n_best = sum(bool(CLAUSE_START.match(t)) for t, _, _ in best)
-    looks_legal = any(re.search(r"\b(article|section|clause|shall)\b", t, re.I)
-                      for t, _, _ in best)
-    if n_best == 0 and (looks_legal or not best):
-        alt = _ocr_lines(page, dpi, psm=6)
-        n_alt = sum(bool(CLAUSE_START.match(t)) for t, _, _ in alt)
-        if n_alt > n_best:
-            return alt, 6
-    return best, 3
+    alt = _ocr_lines(page, dpi, psm=6)
+    n3 = sum(bool(CLAUSE_START.match(t)) for t, _, _ in best)
+    n6 = sum(bool(CLAUSE_START.match(t)) for t, _, _ in alt)
+    return (alt, 6) if n6 > n3 else (best, 3)
 
 
 # ---------------------------------------------------------- reading order

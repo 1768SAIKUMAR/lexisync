@@ -1,0 +1,21 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      LEXISYNC_OFFLINE: "1"     # stand-in models: no downloads, deterministic
+      LEXISYNC_LLM: mock
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: System packages (Tesseract for the OCR tests)
+        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
+      - name: Python packages (CPU PyTorch)
+        run: pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
+      - name: Tests
+        run: python -m pytest -q
