@@ -145,3 +145,62 @@ each in its own chunk.
 
 **Limitations.** Annexes and sub-paragraph numbering like "1a" are not special-
 cased; a contract with unusual numbering ("Clause Seven") falls back to pages.
+
+## Stage 3 — Retrieval (`lexisync/retrieve.py`, `lexisync/embed.py`)
+
+**Goal.** For a question, return the k (default 4) chunks most likely to contain
+the answer, with a 0..1 relevance score that Stage 4 uses to decide whether to
+abstain.
+
+**BM25 (lexical).** Scores a chunk by the query words it contains, weighting rare
+words more (IDF) and normalising by chunk length (b = 0.75), with saturating
+term frequency (k1 = 1.5). *Why we need it:* clause numbers. "7.2" or "83(5)" are
+exact strings; an embedding model sees "7.2" as a vague number. The tokenizer
+keeps references as one token (`7.2`, `83(5)(a)`, `2016/679`) and also emits their
+prefixes (`83(5)(a)` → `83(5)`, `83`), so "Article 83" still matches 83(5). A naive
+tokenizer would split "7.2" into "7" and "2" and match every clause 7.x and x.2.
+
+**Dense (semantic).** bge-small-en-v1.5 maps text to a 384-d unit vector; relevance
+= cosine similarity = dot product. *Why:* paraphrases. "penalty" ↔ "administrative
+fine", "can I be forgotten" ↔ "right to erasure". bge was trained with an
+instruction prefix on *queries only* ("Represent this sentence for searching
+relevant passages: "); passages are encoded plain. This is a **bi-encoder**: query
+and passage never see each other, so all 638 chunks are embedded once at index
+time and a query is one matrix-vector product (milliseconds).
+
+**Reciprocal Rank Fusion (k = 60).** score(d) = Σ 1 / (60 + rank_r(d)). *Why ranks,
+not scores?* BM25 is unbounded (0–40), cosine is −1..1; adding them is
+meaningless and normalising them is fragile. RRF only needs ranks. k = 60 (the
+value from the original RRF paper) flattens the head so that one ranker alone
+can't dominate: a passage ranked 3rd by both beats one ranked 1st by one and
+absent from the other. Top 30 fused candidates go on.
+
+**Cross-encoder rerank.** ms-marco-MiniLM-L-6-v2 reads "[query] [SEP] [passage]"
+*together*, so attention compares query and passage tokens directly, which is much more
+accurate than cosine between two separately made vectors, but one transformer
+pass per pair. So: cheap retrieval for recall (top 30), expensive model for
+precision (re-order 30). Output logit → sigmoid → relevance 0..1. The
+**best relevance** feeds the abstention gate (Stage 4).
+
+**Query planner (multi-query, `_mq`).** "What is the maximum fine, and which
+violations trigger the higher fine?" needs two passages: 83(4) and 83(5). One
+embedding of the whole question lands between topics. The planner splits on
+", and what/which/when/how…", runs each part separately, and guarantees the best
+passage of *each* part a slot in the final top-k; remaining slots go to the
+highest relevance. A vague part ("and when does it apply?") gets the first part's
+topic words appended, or it would match anything.
+
+**Five modes** (for the mandatory comparison and recall@k): `bm25`, `dense`,
+`hybrid`, `hybrid_rerank`, `hybrid_rerank_mq`. Assignment requires dense-only vs
+hybrid **or** no-retrieval vs retrieval; we report both.
+
+**Index cache.** Pickle of chunks + embeddings, keyed by a fingerprint (SHA-256 of
+the PDF bytes + embedding model + pipeline version). Same PDFs → loads in ~0.05 s;
+any change → rebuilt. BM25 is rebuilt on load (fast) rather than pickled.
+
+**Offline stand-ins.** `LEXISYNC_OFFLINE=1` swaps in a hashing encoder (words and
+bigrams hashed into 384 dims) and a keyword-overlap reranker, so tests and CI
+run without downloading models. Never used for reported numbers.
+
+**Document filter.** `doc_ids` restricts search to the documents of the
+current case (UI case selection).
