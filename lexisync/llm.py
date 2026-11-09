@@ -62,16 +62,20 @@ class LLM(Protocol):
 
 class OllamaLLM:
     def __init__(self, model: str = "qwen2.5:7b", host: str = "http://localhost:11434",
-                 seed: int = 42, num_ctx: int = 8192, timeout: int = 300):
+                 seed: int = 42, num_ctx: int = 8192, timeout: int = 180,
+                 max_tokens: int = 1024):
         self.name = f"ollama:{model}"
         self.model, self.host, self.seed = model, host.rstrip("/"), seed
-        self.num_ctx, self.timeout = num_ctx, timeout
+        self.num_ctx, self.timeout, self.max_tokens = num_ctx, timeout, max_tokens
 
     def generate(self, system: str, user: str, schema: dict | None = None) -> LLMResponse:
         body = {"model": self.model, "stream": False,
                 "messages": [{"role": "system", "content": system},
                              {"role": "user", "content": user}],
-                "options": {"temperature": 0, "seed": self.seed, "num_ctx": self.num_ctx}}
+                # num_predict caps the answer: JSON-constrained decoding can get stuck
+                # emitting whitespace forever; a normal answer needs ~350 tokens.
+                "options": {"temperature": 0, "seed": self.seed, "num_ctx": self.num_ctx,
+                            "num_predict": self.max_tokens}}
         if schema:
             body["format"] = schema
         t = time.perf_counter()
@@ -80,6 +84,8 @@ class OllamaLLM:
         except requests.ConnectionError as e:
             raise RuntimeError("Ollama is not running. Start it with "
                                "`brew services start ollama` (or `ollama serve`).") from e
+        except requests.Timeout as e:
+            raise RuntimeError(f"Ollama did not answer within {self.timeout} s.") from e
         r.raise_for_status()
         j = r.json()
         return LLMResponse(j["message"]["content"], j.get("prompt_eval_count", 0),
@@ -96,7 +102,7 @@ class OpenAICompatLLM:
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
 
     def generate(self, system: str, user: str, schema: dict | None = None) -> LLMResponse:
-        body = {"model": self.model, "temperature": 0, "seed": self.seed,
+        body = {"model": self.model, "temperature": 0, "seed": self.seed, "max_tokens": 1024,
                 "messages": [{"role": "system", "content": system},
                              {"role": "user", "content": user}]}
         if schema:
@@ -152,4 +158,5 @@ def get_llm(cfg: dict) -> LLM:
         return MockLLM()
     if backend == "openai":
         return OpenAICompatLLM(c["openai_model"], c["openai_base_url"], seed=cfg["seed"])
-    return OllamaLLM(c["ollama_model"], c["ollama_host"], seed=cfg["seed"], num_ctx=c["num_ctx"])
+    return OllamaLLM(c["ollama_model"], c["ollama_host"], seed=cfg["seed"], num_ctx=c["num_ctx"],
+                     timeout=c.get("timeout_s", 180), max_tokens=c.get("max_tokens", 1024))

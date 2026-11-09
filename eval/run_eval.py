@@ -133,8 +133,26 @@ def run_config(name, index, llm, cfg, questions, run_file: Path, resume: bool):
         if q["id"] in done:
             continue
         t = time.perf_counter()
-        r = answer_question(q["question"], index, llm, cfg, mode=mode or "hybrid_rerank_mq",
-                            k=k or None, verify=verify, closed_book=closed)
+        r, err = None, ""
+        for attempt in (1, 2):                 # one retry, then record the failure
+            try:
+                r = answer_question(q["question"], index, llm, cfg,
+                                    mode=mode or "hybrid_rerank_mq", k=k or None,
+                                    verify=verify, closed_book=closed)
+                break
+            except Exception as e:  # noqa: BLE001 - keep the run going
+                err = f"{type(e).__name__}: {e}"
+                print(f"  [{name}] {q['id']}: attempt {attempt} failed: {err}", flush=True)
+        if r is None:
+            row = {"id": q["id"], "type": q["type"], "config": name, "question": q["question"],
+                   "answer": "", "confidence": "ERROR", "abstained": False, "error": err,
+                   "abstain_reason": "", "claims": 0, "dropped": 0, "attempts": 0,
+                   "cited": [], "best_relevance": None,
+                   "latency_s": round(time.perf_counter() - t, 2), "timings": {},
+                   "tokens": {}, "missing": []}
+            with open(run_file, "a") as f:
+                f.write(json.dumps(row) + "\n")
+            continue
         cited = [{"label": l, "doc": cid.split(":")[0], "chunk_id": cid}
                  for c in r.claims for l, cid in zip(c.labels, c.chunk_ids)]
         row = {"id": q["id"], "type": q["type"], "config": name, "question": q["question"],
@@ -176,9 +194,13 @@ def summarise(out_dir: Path, questions, chunk_index, cfg, llm_name) -> dict:
         name = run_file.stem
         correct, cprec, lat, toks = [], [], [], []
         una_abst, ans_abst, man = [], [], []
+        errors = 0
         for row in rows:
             q = qs[row["id"]]
-            if q["type"] == "unanswerable":
+            if row.get("error"):                 # counts as wrong, not as abstention
+                errors += 1
+                ok = False
+            elif q["type"] == "unanswerable":
                 ok = row["abstained"]
                 una_abst.append(row["abstained"])
             else:
@@ -203,7 +225,7 @@ def summarise(out_dir: Path, questions, chunk_index, cfg, llm_name) -> dict:
             "abstention_accuracy": m(una_abst),
             "false_abstention_rate": m(ans_abst),
             "latency_s": m(lat), "latency_p95_s": round(sorted(lat)[int(0.95 * (len(lat) - 1))], 2),
-            "tokens": m(toks),
+            "tokens": m(toks), "errors": errors,
         }
     fields = ["config", "id", "type", "question", "answer", "confidence", "abstained",
               "auto_correct", "manual_correct", "claims", "dropped", "attempts",

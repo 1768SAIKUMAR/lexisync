@@ -61,3 +61,25 @@ def test_offline_evaluation_end_to_end(pdfs, tmp_path):
         assert (rep / "runs" / "full.jsonl").read_text() == before
     finally:
         shutil.rmtree(ROOT / "reports" / tag, ignore_errors=True)
+
+
+def test_eval_survives_llm_failure(pdfs, tmp_path, monkeypatch):
+    import run_eval
+    from lexisync import load_config
+    from lexisync.retrieve import build_index
+    monkeypatch.setenv("LEXISYNC_OFFLINE", "1")
+
+    class Broken:
+        name = "broken"
+        def generate(self, *a, **k):
+            raise RuntimeError("Ollama did not answer within 180 s.")
+
+    cfg = load_config()
+    idx = build_index([pdfs["eu_regulation.pdf"]], cfg)
+    qs = [{"id": "a", "type": "factual", "question": "What are the administrative fines?",
+           "gold": [{"doc": "eu-regulation", "section": "Article 83", "clause": ""}],
+           "key_facts": ["fine"]}]
+    run_file = tmp_path / "full.jsonl"
+    run_eval.run_config("full", idx, Broken(), cfg, qs, run_file, resume=False)
+    row = json.loads(run_file.read_text())
+    assert row["confidence"] == "ERROR" and "180 s" in row["error"]

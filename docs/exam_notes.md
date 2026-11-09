@@ -363,3 +363,10 @@ error analysis.
 during development (Basic Law of Germany), written before running; no
 changes to code or thresholds afterwards. This tests generalisation, which is
 the same situation as the exam's unseen PDF.
+
+**Robustness fix from the first full evaluation run.** The first `dense_only`
+question hung for 300 s: with JSON-constrained decoding, a 7B model can get
+stuck emitting whitespace and never close the object. Fixes: `num_predict` =
+1024 tokens per answer (normal answers use ~350), a 180 s timeout with a clear
+error, and the evaluation retries a failed question once, then records it as
+an ERROR (counted as wrong, not as an abstention) and continues.
