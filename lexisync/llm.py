@@ -53,6 +53,7 @@ class LLMResponse:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     ms: float = 0.0
+    truncated: bool = False        # output hit the token limit (cut off mid-JSON)
 
 
 class LLM(Protocol):
@@ -88,8 +89,10 @@ class OllamaLLM:
             raise RuntimeError(f"Ollama did not answer within {self.timeout} s.") from e
         r.raise_for_status()
         j = r.json()
+        n_out = j.get("eval_count", 0)
+        cut = j.get("done_reason") == "length" or n_out >= self.max_tokens
         return LLMResponse(j["message"]["content"], j.get("prompt_eval_count", 0),
-                           j.get("eval_count", 0), (time.perf_counter() - t) * 1000)
+                           n_out, (time.perf_counter() - t) * 1000, truncated=cut)
 
 
 class OpenAICompatLLM:

@@ -9,6 +9,7 @@ import pytest
 os.environ["LEXISYNC_OFFLINE"] = "1"
 
 from lexisync import load_config                                   # noqa: E402
+import json  # noqa: E402
 from lexisync.answer import (INSUFFICIENT, _with_labels, answer_question,  # noqa: E402
                              numbers_in, parse_json, quote_found)
 from lexisync.llm import MockLLM                                   # noqa: E402
@@ -236,3 +237,39 @@ def test_second_look_answer_is_still_verified(idx, cfg):
                        "quote": "fines up to 50 000 000 EUR may be imposed"}])
     r = answer_question(Q, idx, MockLLM([REFUSE, invented]), cfg, mode="hybrid_rerank")
     assert r.abstained and not r.claims and len(r.dropped) == 1
+
+
+# ------------------------------------------------------------ truncated output
+def test_parse_json_salvages_complete_claims_from_cut_off_output():
+    full = json.dumps(reply([{"text": "A", "citations": ["C1"], "quote": "q one"},
+                             {"text": "B", "citations": ["C2"], "quote": "q two"}],
+                            answer="A [C1]. B [C2]."))
+    cut = full[: full.index('], "answer"')] + ', {"text": "C", "citat'    # cut mid-claim
+    j = parse_json(cut)
+    assert [c["text"] for c in j["claims"]] == ["A", "B"] and not j["abstain"]
+    assert j["_truncated"]
+    assert parse_json('{"claims": [{"text": "x", "cit')["_invalid"]       # nothing complete
+
+
+def test_cut_off_answer_keeps_verified_claims(idx, cfg):
+    def cut(prompt):
+        c = cid_of(prompt, "Article 83(5)")
+        s = json.dumps(good(prompt))
+        return s[: s.index('"answer"')] + '"answer": "Up to EUR 20 million and'   # no end
+    r = answer_question(Q, idx, MockLLM([cut]), cfg, mode="hybrid_rerank")
+    assert not r.abstained and r.claims and r.claims[0].verified
+    assert r.attempts[0]["output_cut_off"]
+
+
+def test_cut_off_before_any_claim_gets_brief_second_look(idx, cfg):
+    cfg["answer"]["low_relevance"] = 0.0
+    llm = MockLLM(['{"claims": [{"text": "Fines can reach', good])
+    r = answer_question(Q, idx, llm, cfg, mode="hybrid_rerank")
+    assert len(llm.calls) == 2 and not r.abstained
+    assert "was cut off" in llm.calls[1]
+
+
+def test_cut_off_reason_is_reported(idx, cfg):
+    cfg["answer"]["low_relevance"] = 1.01             # no second look
+    r = answer_question(Q, idx, MockLLM(['{"claims": [{"text": "Fin']), cfg, mode="hybrid_rerank")
+    assert r.abstained and "cut off" in r.abstain_reason

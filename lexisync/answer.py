@@ -52,6 +52,8 @@ Rules:
 9. "answer": plain-language answer, 1-5 sentences. EVERY sentence must end with the
    [C#] marker(s) of the passage(s) it comes from.
 10. "explanation": one or two sentences on why the cited evidence supports the answer.
+11. Be concise: at most 6 claims, quotes of at most 25 words, no repeated text. The
+    whole JSON must be short.
 
 Write the JSON fields in this order: claims, answer, missing, abstain, explanation,
 conflicts."""
@@ -166,8 +168,35 @@ def parse_json(text: str) -> dict:
                 return json.loads(m.group(0))
             except json.JSONDecodeError:
                 pass
+    claims = _salvage_claims(t)
+    if claims:                      # cut off after some complete claims: keep them
+        return {"claims": claims, "answer": "", "missing": [], "abstain": False,
+                "explanation": "", "conflicts": [], "_truncated": True}
     return {"claims": [], "answer": "", "missing": [], "abstain": True,
-            "explanation": "model output was not valid JSON", "conflicts": []}
+            "explanation": "model output was not valid JSON", "conflicts": [],
+            "_invalid": True}
+
+
+def _salvage_claims(t: str) -> list[dict]:
+    """Recover the complete claim objects from JSON that was cut off (token limit).
+    "claims" is the first field, so finished claims survive truncation; each one is
+    still checked by the verifier like any other claim."""
+    m = re.search(r'"claims"\s*:\s*\[', t)
+    if not m:
+        return []
+    dec, i, out = json.JSONDecoder(), m.end(), []
+    while True:
+        while i < len(t) and t[i] in " \t\r\n,":
+            i += 1
+        if i >= len(t) or t[i] != "{":
+            break
+        try:
+            obj, i = dec.raw_decode(t, i)
+        except json.JSONDecodeError:
+            break
+        if isinstance(obj, dict):
+            out.append(obj)
+    return out
 
 
 SECOND_LOOK_NOTE = (
@@ -175,6 +204,8 @@ SECOND_LOOK_NOTE = (
     "relevance {rel:.2f}). Read them again carefully. If any passage states the answer, "
     "even in different words, extract it as claims with verbatim quotes. Abstain only if "
     "no passage answers the question.")
+BREVITY_NOTE = ("Your previous answer was too long and was cut off. Give at most 4 claims "
+                "with short quotes and a short answer.")
 
 
 def build_prompt(question: str, hits: list[Hit], note: str = "") -> str:
@@ -315,6 +346,7 @@ def answer_question(question: str, index: Index, llm: LLM, cfg: dict, *,
     last: dict = {}
     failed: list[Claim] = []
     second_look = False                       # one re-read when the model refuses
+    was_cut = False                           # previous output hit the token limit
     for attempt in range(1, (a["max_attempts"] if verify else 1) + 1):
         sr = index.search(query, mode=mode, k=k, doc_ids=doc_ids)
         timings["retrieval"] += sr.timings.get("retrieval", 0)
@@ -342,11 +374,14 @@ def answer_question(question: str, index: Index, llm: LLM, cfg: dict, *,
 
         # ----- 2-3. generate
         note = SECOND_LOOK_NOTE.format(rel=res.best_relevance or 0) if second_look else ""
+        if second_look and was_cut:
+            note += " " + BREVITY_NOTE
         r = llm.generate(SYSTEM_PROMPT, build_prompt(question, hits, note), ANSWER_SCHEMA)
         timings["llm"] += r.ms
         tokens["prompt"] += r.prompt_tokens
         tokens["completion"] += r.completion_tokens
         last = parse_json(r.text)
+        was_cut = r.truncated or last.get("_truncated", False) or last.get("_invalid", False)
         res.passages = hits
 
         # ----- 4. verify
@@ -368,6 +403,7 @@ def answer_question(question: str, index: Index, llm: LLM, cfg: dict, *,
             "rejected": [{"claim": c.text, "reason": c.reason} for c in failed],
             "model_abstained": bool(last.get("abstain")),
             "second_look": second_look,
+            "output_cut_off": was_cut,
         })
         # ----- 4b. second look: the model refused although retrieval found clearly
         # relevant passages (relevance >= low_relevance). Re-ask once with the same
@@ -392,9 +428,13 @@ def answer_question(question: str, index: Index, llm: LLM, cfg: dict, *,
 
     if not res.claims:
         res.abstained = True
-        res.abstain_reason = ("the model found no answer in the passages"
-                              if last.get("abstain") or not last.get("claims")
-                              else "no claim could be verified against its cited passage")
+        if was_cut and not last.get("claims"):
+            res.abstain_reason = ("the model's output was cut off at the token limit "
+                                  "before it finished a claim")
+        elif last.get("abstain") or not last.get("claims"):
+            res.abstain_reason = "the model found no answer in the passages"
+        else:
+            res.abstain_reason = "no claim could be verified against its cited passage"
         res.answer = f"{ABSTAIN_TEXT} Searched: {', '.join(res.searched)}."
         res.confidence = INSUFFICIENT
     else:

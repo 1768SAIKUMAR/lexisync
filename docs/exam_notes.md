@@ -483,3 +483,22 @@ if a claim shows ✘ it was *dropped* — that is the verifier working, show it.
   relevance to the question. A fix would be a second check that the claim answers the
   question (e.g. cross-encoder score of question vs. claim), but I did not tune after the
   held-out run, to keep the test honest."
+
+## Real root cause found in the UI: cut-off output (token limit)
+
+- **Symptom (UI, fines question):** INSUFFICIENT EVIDENCE although the passages were
+  perfect (relevance 0.99, Article 83(4)–(6)). Tokens shown: 1984 + **2048** = 2 attempts ×
+  the 1024-token limit → both outputs were **cut off mid-JSON**.
+- **Why it looked like a refusal:** invalid JSON was parsed as "no claims, abstain", and the
+  message said "the model found no answer". The earlier diagnosis of f02/f04 ("model
+  variability") was most likely the same bug — they also took 80–145 s.
+- **Fix (general, not tuned to a question):**
+  1. Detect truncation (`done_reason == "length"` from Ollama).
+  2. Salvage: "claims" is the first JSON field, so every *complete* claim before the cut is
+     recovered and verified as usual.
+  3. If nothing complete survived, the second look adds "your answer was cut off, give at
+     most 4 claims with short quotes".
+  4. Prompt rule 11: at most 6 claims, short quotes.
+  5. The reason shown is now honest: "output was cut off at the token limit".
+- **Exam lesson:** "The UI's token counter showed exactly twice the limit — the metric told
+  me the cause. Observability (timings, tokens, retry log) is part of the design."
