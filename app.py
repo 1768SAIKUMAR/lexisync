@@ -2,7 +2,7 @@
 
 Sidebar : cases (create/select), documents in the case, retrieval mode,
           passages slider, verifier toggle, no-retrieval baseline toggle, LLM.
-Tabs    : Ask | Documents & structure | Evaluation
+Tabs    : Ask | Documents & structure | Evaluation | History
 """
 from __future__ import annotations
 
@@ -119,7 +119,8 @@ if pdfs:
 doc_ids = [d.doc_id for d in index.docs.values()
            if Path(d.path).stem in selected] if index else []
 
-tab_ask, tab_docs, tab_eval = st.tabs(["Ask", "Documents & structure", "Evaluation"])
+tab_ask, tab_docs, tab_eval, tab_hist = st.tabs(
+    ["Ask", "Documents & structure", "Evaluation", "History"])
 
 
 # ---------------------------------------------------------------- helpers
@@ -144,6 +145,38 @@ def show_page_for(chunk, key: str):
                  width="stretch")
 
 
+# ---------------------------------------------------------------- history
+def history_path(case: str) -> Path:
+    return CASES / case / "history.jsonl"
+
+
+def load_history(case: str) -> list[dict]:
+    p = history_path(case)
+    if not p.exists():
+        return []
+    out = []
+    for line in p.read_text(encoding="utf-8").splitlines():
+        try:
+            out.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue                                   # skip a damaged line
+    return out
+
+
+def save_to_history(case: str, q: str, r: AnswerResult) -> None:
+    rec = {"time": time.strftime("%Y-%m-%d %H:%M:%S"), "question": q,
+           "confidence": r.confidence, "answer": r.answer,
+           "citations": list(dict.fromkeys(l for c in r.claims for l in c.labels)),
+           "abstain_reason": r.abstain_reason or "", "missing": r.missing,
+           "claims_verified": len(r.claims), "claims_dropped": len(r.dropped),
+           "best_relevance": None if r.best_relevance is None else round(r.best_relevance, 3),
+           "latency_s": round(r.timings.get("total", 0) / 1000, 1),
+           "settings": {"mode": mode, "k": k, "verifier": verify,
+                        "no_retrieval": closed_book, "llm": backend}}
+    with history_path(case).open("a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
 # --------------------------------------------------------------------- Ask
 with tab_ask:
     if not index:
@@ -163,6 +196,7 @@ with tab_ask:
                     st.session_state["res"] = answer_question(
                         q.strip(), index, llm, cfg, mode=mode, k=k, verify=verify,
                         closed_book=closed_book, doc_ids=doc_ids)
+                    save_to_history(case, q.strip(), st.session_state["res"])
                 except RuntimeError as e:
                     st.error(str(e))
 
@@ -303,31 +337,52 @@ with tab_docs:
 
 
 # ---------------------------------------------------------------- Evaluation
+METRICS = [("Correct (manual)", "manual_correctness"), ("Correct (auto)", "correctness"),
+           ("Citation precision", "citation_precision"),
+           ("Abstention accuracy", "abstention_accuracy"),
+           ("False abstentions", "false_abstention_rate"), ("Latency", "latency_s")]
+
+
+def read_json(p: Path):
+    try:
+        return json.loads(p.read_text()) if p.exists() else None
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def metric_row(h: dict) -> None:
+    shown = [(n, k_) for n, k_ in METRICS if h.get(k_) is not None and not pd.isna(h.get(k_))]
+    for col, (name, key) in zip(st.columns(max(len(shown), 1)), shown):
+        v = h[key]
+        col.metric(name, f"{v:.1f} s" if key == "latency_s" else f"{v:.0%}")
+
+
 with tab_eval:
-    summary = REPORTS / "eval_summary.json"
-    if not summary.exists():
+    s = read_json(REPORTS / "eval_summary.json")          # all six setups (ablation)
+    final = read_json(REPORTS / "final" / "summary.json")  # final code, full system
+    held = read_json(REPORTS / "heldout" / "summary.json") # unseen document
+    if not (s or final):
         st.info("No evaluation yet. Run `make eval` (Stage 6); results appear here.")
     else:
-        s = json.loads(summary.read_text())
-        st.caption(f"Run: {s.get('timestamp', '')} · {s.get('n_questions', '?')} questions · "
-                   f"LLM {s.get('llm', '')}")
+        top = final if final and "full" in final.get("configs", {}) else s
+        st.subheader("Final system")
+        st.caption(f"Run: {top.get('timestamp', '')} · {top.get('n_questions', '?')} "
+                   f"questions · LLM {top.get('llm', '')}")
+        metric_row(top["configs"].get(top.get("headline", "full"), {}))
+        if held and "full" in held.get("configs", {}):
+            st.caption(f"Held-out document ({held.get('n_questions', '?')} questions, "
+                       "run once after all tuning)")
+            metric_row(held["configs"]["full"])
+    if s:
         cfgs = pd.DataFrame(s["configs"]).T
-        head = s.get("headline", "full")
-        if head in cfgs.index:
-            h = cfgs.loc[head]
-            m = st.columns(5)
-            for col, (name, key) in zip(m, [("Correct (auto)", "correctness"),
-                                             ("Citation precision", "citation_precision"),
-                                             ("Abstention accuracy", "abstention_accuracy"),
-                                             ("False abstentions", "false_abstention_rate"),
-                                             ("Latency", "latency_s")]):
-                v = h.get(key)
-                col.metric(name, "-" if v is None or pd.isna(v) else
-                           (f"{v:.1f} s" if key == "latency_s" else f"{v:.0%}"))
-        st.subheader("All setups")
+        st.subheader("All setups (ablation run)")
+        if final:
+            st.caption(f"Run: {s.get('timestamp', '')}. Six configurations compared on the "
+                       "same code; the final system above adds the later fixes "
+                       "(second look, cut-off handling).")
         metric_cols = [c for c in ["correctness", "manual_correctness", "citation_precision",
                                    "abstention_accuracy", "false_abstention_rate"]
-                       if c in cfgs.columns]
+                       if c in cfgs.columns and cfgs[c].notna().any()]
         st.bar_chart(cfgs[metric_cols], stack=False)
         if "latency_s" in cfgs.columns:
             st.subheader("Latency per question (s)")
@@ -339,7 +394,59 @@ with tab_eval:
                                 for m, d in s["retrieval"].items()})
             st.line_chart(rec.sort_index())
             st.dataframe(pd.DataFrame(s["retrieval"]).T, width="stretch")
-        answers = REPORTS / "eval_answers.csv"
+        answers = REPORTS / "final" / "answers.csv"
+        if not answers.exists():
+            answers = REPORTS / "eval_answers.csv"
         if answers.exists():
             st.subheader("All answers")
             st.dataframe(pd.read_csv(answers), width="stretch", height=400)
+
+
+# ------------------------------------------------------------------ History
+def _ask_again(q: str) -> None:
+    st.session_state["q"] = q              # runs before the rerun, so the box is filled
+
+
+with tab_hist:
+    hist = load_history(case)
+    if not hist:
+        st.info("No questions asked in this case yet. Answers from the **Ask** tab are "
+                "saved here, with their confidence and citations.")
+    else:
+        st.subheader(f"Question history: {len(hist)} in case “{case}”")
+        df = pd.DataFrame([{"time": h["time"], "question": h["question"],
+                            "confidence": h["confidence"],
+                            "citations": "; ".join(h.get("citations", [])),
+                            "latency (s)": h.get("latency_s")} for h in reversed(hist)])
+        st.dataframe(df, hide_index=True, width="stretch",
+                     column_config={"question": st.column_config.TextColumn(width="large"),
+                                    "citations": st.column_config.TextColumn(width="large")})
+        counts = df["confidence"].value_counts()
+        st.caption(" · ".join(f"{c}: {n}" for c, n in counts.items()))
+        for i, h in enumerate(reversed(hist)):
+            with st.expander(f"{h['time']} · {h['confidence']} · {h['question'][:90]}"):
+                st.markdown(badge(h["confidence"]), unsafe_allow_html=True)
+                st.markdown(h["answer"])
+                if h.get("citations"):
+                    st.markdown(" ".join(chip(l) for l in h["citations"]),
+                                unsafe_allow_html=True)
+                if h.get("abstain_reason"):
+                    st.caption(f"Abstained because {h['abstain_reason']}.")
+                if h.get("missing"):
+                    st.caption("Not answered by the documents: " + "; ".join(h["missing"]))
+                st_ = h.get("settings", {})
+                st.caption(f"{h.get('claims_verified', 0)} verified claim(s), "
+                           f"{h.get('claims_dropped', 0)} dropped · best relevance "
+                           f"{h.get('best_relevance')} · {h.get('latency_s')} s · "
+                           f"{st_.get('mode')}, k={st_.get('k')}, "
+                           f"verifier {'on' if st_.get('verifier') else 'off'}"
+                           + (", no-retrieval baseline" if st_.get("no_retrieval") else ""))
+                st.button("Ask again", key=f"again-{i}", on_click=_ask_again,
+                          args=(h["question"],), help="Puts the question back in the Ask tab")
+        c1, c2 = st.columns(2)
+        c1.download_button("Download history (CSV)", df.to_csv(index=False),
+                           file_name=f"lexisync-history-{case}.csv", mime="text/csv",
+                           width="stretch")
+        if c2.button("Clear history", width="stretch"):
+            history_path(case).unlink(missing_ok=True)
+            st.rerun()
