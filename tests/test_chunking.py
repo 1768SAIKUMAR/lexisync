@@ -180,3 +180,24 @@ def test_uk_statute_sections_and_subsections():
     # the contents page and the running header never become sections
     assert not any(c.section == "Section 4" and c.page_start == 2 for c in chunks)
     assert not any("(c. 23)\n2" in c.text for c in chunks)
+
+
+def test_judgment_with_numbered_page_tops_falls_back_to_pages():
+    """Found on a US Supreme Court slip opinion: page tops like '2\\nMOORE v. HARPER'
+    looked like statute headings, no real section was confirmed, and every chunk
+    was labelled 'Preamble'. It must cite by page instead."""
+    from lexisync.models import Block, Document, StructureReport
+    texts = []
+    for pg in range(1, 6):
+        texts += [(pg, f"{pg + 1}\nMOORE v. HARPER"), (pg, "Opinion of the Court"),
+                  (pg, f"(1) The Court considered argument number {pg} at length."),
+                  (pg, "The Elections Clause does not insulate state legislatures from "
+                       "the ordinary exercise of state judicial review.")]
+    blocks = [Block(page=p, bbox=(0, 0, 100, 10), text=t, order=i)
+              for i, (p, t) in enumerate(texts)]
+    doc = Document(doc_id="j", name="Moore", path="x.pdf", pages=[], blocks=blocks,
+                   report=StructureReport(doc_id="j", n_pages=6))
+    chunks = chunk_document(doc)
+    assert not any(c.section == "Preamble" for c in chunks)
+    assert all(c.section.startswith("Page") for c in chunks)
+    assert chunks[0].label == "Moore p. 2"

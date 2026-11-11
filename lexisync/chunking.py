@@ -387,6 +387,11 @@ def chunk_document(doc: Document, include_footnotes: bool = False) -> list[Chunk
     scheme = detect_scheme(blocks)
     drafts = {"eu": _eu_drafts, "contract": _contract_drafts,
               "statute": _statute_drafts, "page": _page_drafts}[scheme](blocks)
+    if scheme == "statute" and len({d.section for d in drafts
+                                    if d.section.startswith("Section ")}) < 2:
+        # looked like a statute (e.g. "2\nMOORE v. HARPER" page tops in a judgment)
+        # but no real sections were confirmed: cite by page instead
+        drafts = _page_drafts(blocks)
     drafts = _attach_captions([d for d in drafts if d.segs])
     drafts = [d for d in _merge_tiny(drafts) if d.text.strip()]
     final = [p for d in drafts for p in _split_long(d)]
