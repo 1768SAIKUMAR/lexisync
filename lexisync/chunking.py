@@ -36,6 +36,10 @@ POINT = re.compile(r"^\(([a-z]{1,3}|[ivx]+)\)\s")                        # "(a) 
 CLAUSE_DOTTED = re.compile(r"^(\d+)\.(\d+(?:\.\d+)*)\.?\s")              # "7.2 ..."
 HEADING_CONTRACT = re.compile(r"^(\d+)\.\s+([A-Z][^.\n]{0,60})$")        # "7. Liability"
 INLINE_HEADING = re.compile(r"^(\d+)\.\s+([A-Z][\w ,&/'-]{1,50})\.\s+(\S.*)$", re.S)
+# UK-style statutes: "1\nCommon assault and battery" (section number + title,
+# one block), subsections "(1)", group headings like "Aggravation" above them.
+STATUTE_HEAD = re.compile(r"^(\d{1,3}[A-Z]{0,2})(?:\n|\s{1,4})([A-Z\u201c\"][^\n]{1,100})$")
+RUNNING_HEAD = re.compile(r"^[^\n]*\b(?:Act|Regulations?|Order) \d{4}\b[^\n]*\n\d{1,4}$")
 SENTENCE_END = re.compile(r"(?<=[.;:])\s+(?=[A-Z(])")
 
 
@@ -64,6 +68,10 @@ def detect_scheme(blocks: list[Block]) -> str:
                           or INLINE_HEADING.match(b.text)) for b in blocks)
     if n_art >= 2:
         return "eu"
+    n_stat = sum(bool(_statute_head(b.text)) for b in blocks)
+    n_paren = sum(bool(PAREN_NUM.match(b.text)) for b in blocks)
+    if n_stat >= 2 and n_paren >= 2:
+        return "statute"
     if n_contract >= 3:
         return "contract"
     return "page"
@@ -190,6 +198,80 @@ def _contract_drafts(blocks: list[Block]) -> list[_Draft]:
     return drafts
 
 
+def _statute_head(t: str):
+    """A statute section heading: number + title, no full stop at the end."""
+    m = STATUTE_HEAD.match(t.strip())
+    return m if m and not m.group(2).rstrip().endswith((".", ";", ",")) else None
+
+
+def _is_crosshead(t: str) -> bool:
+    """A group heading such as 'Aggravation' or 'General provisions'."""
+    t = t.strip()
+    return ("\n" not in t and 2 < len(t) < 60 and t[0].isupper()
+            and not t.endswith((".", ";", ",", ":")) and not re.search(r"\d", t))
+
+
+def _statute_drafts(blocks: list[Block]) -> list[_Draft]:
+    """Statutes (UK acts and similar): Section 1 -> subsections 1(1), 1(2);
+    points (a), (b) stay with their subsection; group headings become context."""
+    drafts: list[_Draft] = []
+    cur: _Draft | None = None
+    section, title, group, in_body = "", "", "", False
+
+    def start(clause, kind="text", sec=None, ctx=None):
+        nonlocal cur
+        cur = _Draft(sec or f"Section {section}", clause, title if sec is None else "",
+                     kind, group if ctx is None else ctx)
+        drafts.append(cur)
+
+    texts = [b.text.strip() for b in blocks]
+
+    def following(i: int) -> str:
+        for t in texts[i + 1:]:
+            if not RUNNING_HEAD.match(t):
+                return t
+        return ""
+
+    def body_follows(i: int) -> bool:
+        """A real heading is followed by its text, not by another heading
+        (a contents list) or a title page ('ELIZABETH II')."""
+        n = following(i)
+        if PAREN_NUM.match(n):
+            return True
+        first = n.split("\n", 1)[0]
+        return bool(n) and n[0].isupper() and not _statute_head(n) \
+            and not _is_crosshead(n) and not first.isupper()
+
+    for i, b in enumerate(blocks):
+        t = texts[i]
+        nxt = following(i)
+        if RUNNING_HEAD.match(t):                         # "...Act 2018 (c. 23)\n2"
+            continue
+        if (m := _statute_head(t)) and body_follows(i):
+            section, title, in_body = m.group(1), m.group(2).strip(), True
+            start("", "heading")
+            cur.add(b)
+            continue
+        if _is_crosshead(t) and _statute_head(nxt):       # "Aggravation" above section 1
+            group = t
+            continue
+        if not in_body:                                   # cover, contents, enacting words
+            if cur is None or cur.section != "Preamble":
+                start("", "text", sec="Preamble", ctx="Preamble")
+            cur.add(b)
+            continue
+        if b.kind == "table":
+            start(cur.clause if cur else "", "table")
+            cur.add(b)
+            continue
+        if m := PAREN_NUM.match(t):
+            start(f"{section}({m.group(1)})")
+            cur.add(b)
+            continue
+        cur.add(b)                                        # points (a), continuations
+    return drafts
+
+
 def _page_drafts(blocks: list[Block]) -> list[_Draft]:
     out: list[_Draft] = []
     for b in blocks:
@@ -304,7 +386,7 @@ def chunk_document(doc: Document, include_footnotes: bool = False) -> list[Chunk
     blocks = [b for b in doc.blocks if include_footnotes or b.kind != "footnote"]
     scheme = detect_scheme(blocks)
     drafts = {"eu": _eu_drafts, "contract": _contract_drafts,
-              "page": _page_drafts}[scheme](blocks)
+              "statute": _statute_drafts, "page": _page_drafts}[scheme](blocks)
     drafts = _attach_captions([d for d in drafts if d.segs])
     drafts = [d for d in _merge_tiny(drafts) if d.text.strip()]
     final = [p for d in drafts for p in _split_long(d)]

@@ -96,6 +96,8 @@ class Chunk:
             ref = f"Article {self.clause}" if self.clause else self.section
         elif self.section.startswith(("Recital", "Preamble", "Page")):
             ref = "" if self.section.startswith("Page") else self.section
+        elif self.clause and "(" in self.clause:      # statute: section 1(2)
+            ref = f"section {self.clause}"
         elif self.clause:
             ref = f"clause {self.clause}"
         else:

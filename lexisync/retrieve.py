@@ -34,7 +34,7 @@ from .ingest import ingest_pdf
 from .models import Chunk, Document
 
 MODES = ("bm25", "dense", "hybrid", "hybrid_rerank", "hybrid_rerank_mq")
-INDEX_VERSION = 3        # bump when ingestion/chunking output changes
+INDEX_VERSION = 4        # bump when ingestion/chunking output changes
 
 # ------------------------------------------------------------- tokenizer
 # Legal references first, so "83(5)", "7.2", "2016/679" survive as one token;

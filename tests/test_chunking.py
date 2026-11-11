@@ -127,3 +127,56 @@ def test_real_gdpr_structure():
     assert c.label == "GDPR p. 83, Article 83(5)"
     assert "20 000 000 EUR" in c.text and "4 %" in c.text
     assert [c for c in chunks if c.clause == "4(11)"][0].kind == "definition"
+
+
+def _uk_act_blocks():
+    """Block texts as PyMuPDF returns them for a real UK act
+    (Assaults on Emergency Workers (Offences) Act 2018, legislation.gov.uk)."""
+    from lexisync.models import Block
+    pages = [
+        (0, ["Assaults on \nEmergency Workers", "(Offences) Act 2018", "CHAPTER 23"]),
+        (2, ["CONTENTS", "Aggravation",
+             "1\nCommon assault and battery\n2\nAggravating factor\n3\nMeaning of “emergency worker”",
+             "General", "4\nExtent, commencement and short title"]),
+        (4, ["ELIZABETH II\nc. 23", "2018 CHAPTER 23",
+             "BE IT ENACTED by the Queen’s most Excellent Majesty, as follows:",
+             "Aggravation", "1\nCommon assault and battery",
+             "(1)\nThe section applies to an offence of common assault, or battery, that is\ncommitted against an emergency worker acting in the exercise of functions.",
+             "(2)\nA person guilty of an offence to which this section applies is liable—",
+             "(a)\non summary conviction, to imprisonment for a term not exceeding 12\nmonths, or to a fine, or to both;"]),
+        (5, ["Assaults on Emergency Workers (Offences) Act 2018 (c. 23)\n2",
+             "(6)\nThis section applies only in relation to offences committed on or after the day\nit comes into force.",
+             "2\nAggravating factor",
+             "(1)\nThis section applies where the court is considering the seriousness of an offence."]),
+        (6, ["3\nMeaning of “emergency worker”",
+             "(1)\nIn sections 1 and 2, “emergency worker” means—",
+             "(a)\na constable;", "General", "4\nExtent, commencement and short title",
+             "(1)\nThis Act extends to England and Wales."]),
+    ]
+    out = []
+    for page, texts in pages:
+        for t in texts:
+            out.append(Block(page=page, bbox=(0, 0, 100, 10), text=t, order=len(out)))
+    return out
+
+
+def test_uk_statute_sections_and_subsections():
+    from lexisync.chunking import detect_scheme
+    from lexisync.models import Document
+    blocks = _uk_act_blocks()
+    assert detect_scheme(blocks) == "statute"
+    from lexisync.models import StructureReport
+    doc = Document(doc_id="uk", name="UK Act", path="x.pdf", pages=[], blocks=blocks,
+                   report=StructureReport(doc_id="uk", n_pages=7))
+    chunks = chunk_document(doc)
+    labels = [c.label for c in chunks]
+    assert "UK Act p. 5, section 1(2)" in labels
+    assert "UK Act p. 7, section 3(1)" in labels
+    s12 = next(c for c in chunks if c.clause == "1(2)")
+    assert "12\nmonths" in s12.text                        # point (a) stays with 1(2)
+    assert s12.title == "Common assault and battery" and s12.context == "Aggravation"
+    s41 = next(c for c in chunks if c.clause == "4(1)")
+    assert s41.context == "General" and s41.page_start == 6
+    # the contents page and the running header never become sections
+    assert not any(c.section == "Section 4" and c.page_start == 2 for c in chunks)
+    assert not any("(c. 23)\n2" in c.text for c in chunks)

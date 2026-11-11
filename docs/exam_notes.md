@@ -507,3 +507,18 @@ if a claim shows ✘ it was *dropped* — that is the verifier working, show it.
   (faster, because no more 1024-token runaways). Citation precision 79 % (was 83 %): more
   answers, some also citing a neighbouring article. Story: 75 % → 80 % (second look) →
   85 % (real root cause fixed).
+
+## Statute layout (UK acts) — found by testing an unseen PDF from a URL
+
+- **Found:** the Assaults on Emergency Workers (Offences) Act 2018, fetched by URL from
+  legislation.gov.uk, was chunked by page only ("p. 6"), because the chunker knew EU articles
+  and contract clauses but not UK sections ("1\nCommon assault and battery", then "(1)", "(2)").
+- **Fix:** a third layout, *statute*: section heading = number + title in one block; subsections
+  "(1)" become clauses 1(1), 1(2); points (a), (b) stay with their subsection; group headings
+  ("Aggravation", "General") become context; the running header "…Act 2018 (c. 23)\n2" is
+  skipped. A heading only counts when real text follows it, so the contents page
+  ("4 Extent, commencement…" followed by the title page) is not mistaken for section 4.
+- **Result:** citations like "p. 5, section 1(2)". Tested on the block texts PyMuPDF returns for
+  that real PDF (`tests/test_chunking.py::test_uk_statute_sections_and_subsections`).
+- **Exam line:** "Layouts are detected automatically — EU articles, contract clauses, statute
+  sections — with a page-level fallback, so an unknown layout still gets page citations."
