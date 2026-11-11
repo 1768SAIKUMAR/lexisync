@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-09 21:12",
+  "timestamp": "2026-11-11 14:10",
   "n_questions": 20,
   "llm": "ollama:qwen2.5:7b",
   "headline": "full",
@@ -7,7 +7,7 @@
     "full": {
       "n": 20,
       "correctness": 0.85,
-      "manual_correctness": null,
+      "manual_correctness": 0.85,
       "citation_precision": 0.792,
       "abstention_accuracy": 1,
       "false_abstention_rate": 0,

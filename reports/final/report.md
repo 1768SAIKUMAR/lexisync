@@ -1,6 +1,6 @@
 # LexiSync evaluation (final)
 
-20 questions · LLM ollama:qwen2.5:7b · 2026-11-09 21:12
+20 questions · LLM ollama:qwen2.5:7b · 2026-11-11 14:10
 
 ## Retrieval (paragraph level; article level in brackets)
 
@@ -28,4 +28,4 @@
 
 | config | correct (auto) | correct (manual) | citation precision | abstention acc. | false abstention | latency (s) | tokens |
 |---|---|---|---|---|---|---|---|
-| full | 85% | - | 79% | 100% | 0% | 27.77 | 1396.65 |
+| full | 85% | 85% | 79% | 100% | 0% | 27.77 | 1396.65 |

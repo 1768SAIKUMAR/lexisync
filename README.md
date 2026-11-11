@@ -6,6 +6,8 @@ Every claim in an answer cites the **document, page and clause** it comes from
 highlighted**, and the system **abstains** ("INSUFFICIENT EVIDENCE") when the documents do not
 contain the answer. It runs fully locally: open-weight models, no paid API.
 
+**Repository:** https://github.com/1768SAIKUMAR/lexisync · **Author:** Sai Kumar Chintala · DA3 Deep Learning & GenAI final project (Prof. Dr. Gayan de Silva)
+
 ![Architecture](docs/architecture.png)
 
 A printable one-page version of the diagram is in [docs/architecture.pdf](docs/architecture.pdf).
@@ -147,6 +149,13 @@ and 0/16 answerable questions were wrongly abstained (chosen threshold 0.10).
 | **final (+ cut-off handling)** | **85 %** | 79 % | **100 %** | **0 %** | **28 s** |
 
 What this shows:
+**Manual correctness** (as required): every answer of the final run was read and graded by hand
+in the `manual_correct` column of `reports/final/answers.csv`: **17/20 = 85 %**, identical to the
+automatic key-fact check (the two disagreed on no question). The three wrong answers:
+f08 (the answer stops at "designate a DPO in any case where" without the conditions),
+m02 (72 hours correct, but the second part cites the wrong recitals instead of the "high risk"
+rule of Article 34) and m03 (does not say that references now point to the GDPR).
+
 - **Retrieval is essential**: without documents the model is right 35 % of the time and
   invented an answer for one unanswerable question; with the full pipeline 75 % and no
   invented answers. The four unanswerable questions are stopped by the gate in ~0.3 s,
@@ -198,6 +207,19 @@ the question. As agreed for a held-out test, this was not tuned away.
 word error rate 3.5 %; clause-number recall on the hardest page improved from 12 % to 88 %
 by running two Tesseract page-segmentation modes and keeping the one that finds more
 clause numbers.
+
+## Optional extended features (assignment §4)
+
+| # | Feature | Status | Where / evidence |
+|---|---|---|---|
+| 1 | OCR for scanned pages | ✅ | Scanned pages detected (little text + large image), Tesseract at 200 dpi with two page-segmentation modes; flagged if Tesseract is missing. Accuracy on a sample: CER 3.2 %, WER 3.5 % (`scripts/ocr_benchmark.py`, `make ocr`). |
+| 2 | Table extraction | ✅ partly | `find_tables`, merged cells filled, converted to Markdown, captions become citation labels ("Table 9.1"); tested on a synthetic table with merged cells (`tests/test_ingest.py`). No accuracy figure vs. a manual ground truth. |
+| 4 | Bounding-box citations on the page image | ✅ partly | Each chunk keeps its boxes; the cited region is highlighted on the rendered page, with zoom (`lexisync/render.py`). Citation precision is measured at passage level, not region level. |
+| 5 | Planner + verifier agent loop | ✅ | Query planner for multi-part questions; verifier rejects claims whose quote or numbers are not in the cited passage, reformulates and retries (step cap 2); retry log shown in the UI. |
+| 7 | Ablation table | ✅ | No retrieval / dense only / full / without planner / without verifier / k = 4 (Results). |
+| 9 | Multi-document cross-referencing | ✅ partly | Three cross-document questions (GDPR + ePrivacy); the LLM reports conflicting values in a `conflicts` field and states which source it used. |
+| 11 | Latency and cost report | ✅ | Seconds per stage and tokens per question in the UI and in every report; optimisations measured: table pre-check (GDPR ingestion 22 s → 1 s) and truncation handling (average 32 s → 28 s, false abstention 6 % → 0 %). |
+| 3, 6, 8, 10 | VLM figure reading, fine-tuned reranker, autoencoder, public deployment | – | Not implemented. |
 
 ## Limitations (honest)
 
