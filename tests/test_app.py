@@ -133,3 +133,34 @@ def test_evaluation_tab_prefers_final_run(pdfs, tmp_path, monkeypatch):
     vals = {m.label: m.value for m in at.metric}
     assert vals["Correct (manual)"] == "85%"
     assert any("ablation" in s.value for s in at.subheader)
+
+
+def test_switching_case_after_an_answer_does_not_crash(pdfs, tmp_path, monkeypatch):
+    """Found in a demo rehearsal: the last answer (GDPR) was shown in a new case
+    whose index has no GDPR document -> KeyError. Old answers stay with their case."""
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    shutil.copy(pdfs["eu_regulation.pdf"], seed / "reg.pdf")
+    for case, pdf in (("gdpr-demo", "eu_regulation.pdf"), ("other", "contract.pdf")):
+        d = tmp_path / "cases" / case / "docs"
+        d.mkdir(parents=True)
+        shutil.copy(pdfs[pdf], d / pdf)
+    monkeypatch.setenv("LEXISYNC_OFFLINE", "1")
+    monkeypatch.setenv("LEXISYNC_CASES", str(tmp_path / "cases"))
+    monkeypatch.setenv("LEXISYNC_SEED", str(seed))
+    monkeypatch.setenv("LEXISYNC_REPORTS", str(tmp_path / "reports"))
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.run()
+    assert at.sidebar.selectbox[0].value == "gdpr-demo"
+    at.sidebar.radio[0].set_value("Mock (offline demo)").run()
+    at.text_area(key="q").set_value("What are the maximum administrative fines?").run()
+    at.button[[b.label for b in at.button].index("Ask")].click().run()
+    assert not at.exception, at.exception
+    assert any("Article 83" in m.value for m in at.markdown)          # GDPR answer shown
+    at.sidebar.selectbox[0].set_value("other").run()
+    assert not at.exception, at.exception
+    # nothing from the GDPR answer leaks into the other case
+    assert not any("Article" in e.label for e in at.expander)
+    assert not any("Article 83" in m.value for m in at.markdown)
+    at.sidebar.selectbox[0].set_value("gdpr-demo").run()              # and back again
+    assert not at.exception, at.exception

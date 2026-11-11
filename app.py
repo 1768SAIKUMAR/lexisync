@@ -136,7 +136,10 @@ def chip(text: str) -> str:
 
 
 def show_page_for(chunk, key: str):
-    doc = index.docs[chunk.doc_id]
+    doc = index.docs.get(chunk.doc_id) if index else None
+    if doc is None:                       # document no longer in this case
+        st.caption("The cited document is not in the current case.")
+        return
     pages = chunk_pages(chunk)
     for p, boxes in pages.items():
         crop = st.toggle("Zoom to cited region", value=False, key=f"{key}-{p}")
@@ -196,11 +199,14 @@ with tab_ask:
                     st.session_state["res"] = answer_question(
                         q.strip(), index, llm, cfg, mode=mode, k=k, verify=verify,
                         closed_book=closed_book, doc_ids=doc_ids)
+                    st.session_state["res_case"] = case
                     save_to_history(case, q.strip(), st.session_state["res"])
                 except RuntimeError as e:
                     st.error(str(e))
 
         r: AnswerResult | None = st.session_state.get("res")
+        if r is not None and st.session_state.get("res_case") != case:
+            r = None                      # an answer from another case: don't show it
         if r:
             st.divider()
             st.markdown(badge(r.confidence), unsafe_allow_html=True)
