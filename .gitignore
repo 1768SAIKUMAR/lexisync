@@ -7,3 +7,5 @@ data/docs/*.pdf
 reports/*.jsonl
 .DS_Store
 data/cases/
+data/heldout/*.pdf
+*.tar.gz
