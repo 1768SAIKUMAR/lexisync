@@ -8,36 +8,66 @@ contain the answer. It runs fully locally: open-weight models, no paid API.
 
 ![Architecture](docs/architecture.png)
 
-A Mermaid version of the diagram is in [docs/architecture.md](docs/architecture.md);
-a printable one-page PDF is in [docs/architecture.pdf](docs/architecture.pdf).
+A printable one-page version of the diagram is in [docs/architecture.pdf](docs/architecture.pdf).
 
-## How it works (one paragraph per stage)
+## What it does
 
-1. **Ingestion** (`lexisync/ingest.py`) — PyMuPDF text blocks with font sizes and boxes,
-   NFKC normalisation, two-column reading order, running header/footer and footnote removal,
-   tables (`find_tables`, merged cells filled) converted to Markdown, scanned pages sent to
-   Tesseract OCR. A structure report lists what was detected on which page.
-2. **Clause-aware chunking** (`lexisync/chunking.py`) — chunks follow the legal structure
-   (Article 83 → paragraphs 83(5), recitals, definitions 4(11); contract clauses 7 → 7.2).
-   Tiny pieces are merged within the same clause, long ones split at points with the
-   lead-in kept. Each chunk keeps its page(s), bounding boxes and a citation label.
-3. **Retrieval** (`lexisync/retrieve.py`) — BM25 with a legal-reference tokenizer plus
-   `BAAI/bge-small-en-v1.5` embeddings, fused with Reciprocal Rank Fusion (k = 60), then the
-   top 30 are reranked by the cross-encoder `ms-marco-MiniLM-L-6-v2`. A query planner splits
-   multi-part questions so each part gets its own evidence.
-4. **Grounded answers** (`lexisync/answer.py`) — a retrieval gate abstains without calling the
-   LLM when the best relevance is below 0.10. Otherwise `qwen2.5:7b` (Ollama, temperature 0,
-   seed 42, JSON output) writes claims, each with a passage id and a verbatim quote. Code then
-   checks every quote against the cited passage (rapidfuzz) and every number; failing claims
-   trigger one reformulated retry and are dropped if still unsupported. Only verified,
-   cited sentences are shown, with a confidence level HIGH / MEDIUM / LOW.
-5. **UI** (`app.py`, `lexisync/render.py`) — Streamlit app with cases (separate document
-   sets), upload or URL, answer + citations + claim table, and the cited page rendered with
-   the cited region highlighted.
-6. **Evaluation** (`eval/run_eval.py`) — retrieval recall@k/MRR for five retrieval modes and
-   end-to-end comparison of six system configurations (ablations), plus a held-out test.
-7. **Engineering** — pinned requirements, `config.yaml` with seed 42, Makefile, Dockerfile +
-   docker-compose (app + Ollama), GitHub Actions CI, 80+ tests that run offline.
+1. Create a **case** (a separate set of documents) and add legal PDFs by upload or URL.
+2. The **Documents & structure** tab shows what was detected in each PDF: pages, articles and
+   recitals, two-column pages, tables, footnotes, removed headers, scanned (OCR) pages.
+3. Ask a question, e.g. *"Under the GDPR, what is the maximum fine a company can receive, and
+   which kinds of violations trigger the higher fine?"*
+4. The answer cites every claim as `document p. page, clause` (e.g. `GDPR p. 83, Article 83(5)`),
+   shows a confidence badge (HIGH / MEDIUM / LOW), a table of verified claims with their quotes,
+   and the cited PDF page with the cited region highlighted.
+5. If the documents do not contain the answer (*"What is the speed limit on German motorways?"*),
+   it answers **INSUFFICIENT EVIDENCE** and lists the documents it searched.
+
+## Flowchart
+
+```mermaid
+flowchart TD
+    subgraph INDEX["Indexing: once per document"]
+        A["PDF upload or URL"] --> B["Ingestion<br/>text blocks, reading order, 2 columns,<br/>headers/footers, footnotes, tables"]
+        B --> S{"Scanned page?"}
+        S -- yes --> O["Tesseract OCR, 200 dpi"] --> C
+        S -- no --> C["Clause-aware chunking<br/>Article 83 &rarr; 83(5), recitals, clause 7.2<br/>page + bounding boxes + label"]
+        C --> X[("Index<br/>BM25 + bge-small embeddings")]
+    end
+
+    subgraph ANSWER["Answering: per question"]
+        Q["Question"] --> P["Query planner<br/>split multi-part questions"]
+        P --> R["Hybrid retrieval<br/>BM25 + dense, RRF k = 60, top 30"]
+        X --> R
+        R --> K["Cross-encoder rerank<br/>relevance 0..1, keep top 6"]
+        K --> G{"Best relevance<br/>&ge; 0.10?"}
+        G -- no --> AB["INSUFFICIENT EVIDENCE<br/>+ documents searched<br/>(no LLM call)"]
+        G -- yes --> L["LLM qwen2.5:7b, temperature 0, seed 42<br/>JSON: claims with passage id + quote"]
+        L --> T{"Output cut off or<br/>model refused?"}
+        T -- "yes, relevant passages" --> L
+        T -- no --> V{"Verifier: quote in cited passage<br/>and all numbers match?"}
+        V -- "claim fails (1st try)" --> R
+        V -- "no claim survives" --> AB
+        V -- pass --> CI["Citations + confidence<br/>HIGH / MEDIUM / LOW"]
+        CI --> UI["Streamlit UI<br/>answer, claim table,<br/>cited page highlighted"]
+        AB --> UI
+    end
+```
+
+## How it works
+
+| Stage | What happens | File |
+|---|---|---|
+| **Ingestion** | PyMuPDF reads text blocks with their font size and position. Text is normalised (NFKC), two-column pages are read column by column, running headers/footers (repeated on ≥ 40 % of pages) and footnotes (small font near the bottom) are removed from the main text, tables are converted to Markdown, and pages with almost no text but a large image are sent to Tesseract OCR. A structure report lists everything detected, per page. | `lexisync/ingest.py` |
+| **Chunking** | Chunks follow the legal structure instead of a fixed size: recitals, articles and their paragraphs (`83(5)`), definitions (`4(11)`), contract clauses (`7`, `7.2`). Pieces under 120 characters are merged within the same clause; pieces over 1500 are split at points (a), (b) with the lead-in sentence kept. Each chunk stores its pages, bounding boxes and a citation label. | `lexisync/chunking.py` |
+| **Retrieval** | BM25 with a tokenizer that keeps legal references (`7.2`, `83(5)(a)`) whole, plus dense embeddings (`BAAI/bge-small-en-v1.5`). The two rankings are fused with Reciprocal Rank Fusion (k = 60); the top 30 are reranked by a cross-encoder (`ms-marco-MiniLM-L-6-v2`) that reads question and passage together. A query planner splits "A, and which B?" questions so each part gets its own best passage. The index is cached on disk. | `lexisync/retrieve.py`, `lexisync/embed.py` |
+| **Abstention gate** | If the best rerank relevance is below 0.10, the system answers INSUFFICIENT EVIDENCE immediately, without calling the LLM. | `lexisync/answer.py` |
+| **Generation** | A local LLM (`qwen2.5:7b` via Ollama, temperature 0, seed 42) sees only the numbered passages and returns JSON: claims (each with a passage id and a verbatim quote), the answer, missing parts, an abstain flag and an explanation. An OpenAI-compatible API or a scripted mock can be used instead. | `lexisync/llm.py`, `lexisync/answer.py` |
+| **Verification** | Code — not the LLM — checks every claim: the quote must occur in the cited passage (rapidfuzz `partial_ratio` ≥ 85 or word overlap ≥ 0.6) and every number must match. A failed claim triggers one reformulated search and a second attempt; claims that still fail are dropped. If the output was cut off at the token limit, complete claims are kept and the model is asked for a shorter answer. Only cited, verified sentences are shown. | `lexisync/answer.py` |
+| **Confidence** | HIGH (relevance ≥ 0.70, nothing dropped or missing), MEDIUM, LOW (relevance < 0.30 or most claims dropped), or INSUFFICIENT EVIDENCE. | `lexisync/answer.py` |
+| **UI** | Streamlit with three tabs: **Ask** (answer, citation chips, confidence, timings and tokens, claim table, retrieved passages, cited page with highlighted region), **Documents & structure** (upload/URL, re-index, structure report) and **Evaluation** (results from `reports/`). | `app.py`, `lexisync/render.py` |
+| **Evaluation** | Retrieval recall@1/3/5/10 and MRR for five retrieval modes; end-to-end correctness, citation precision, abstention accuracy, false abstention, latency and tokens for six configurations; a held-out test on an unseen document; an OCR accuracy benchmark. | `eval/run_eval.py`, `scripts/ocr_benchmark.py` |
+| **Engineering** | Pinned requirements, `config.yaml` (seed 42), Makefile, Dockerfile + docker-compose (app + Ollama), GitHub Actions CI, 90 offline tests. | `Makefile`, `Dockerfile`, `.github/workflows/ci.yml`, `tests/` |
 
 ## Quickstart (macOS / Linux)
 
