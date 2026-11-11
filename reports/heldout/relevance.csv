@@ -1,0 +1,9 @@
+id,type,best_relevance
+h01,factual,0.9997
+h02,factual,0.9992
+h03,factual,0.9998
+h04,factual,0.9987
+h05,multihop,0.9993
+h06,unanswerable,0.0002
+h07,unanswerable,0.0001
+h08,unanswerable,0.8985

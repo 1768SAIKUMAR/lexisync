@@ -1,0 +1,62 @@
+{
+  "bm25": {
+    "recall@1_article": 0.646,
+    "recall@3_article": 0.771,
+    "recall@5_article": 0.833,
+    "recall@10_article": 0.917,
+    "mrr_article": 0.804,
+    "recall@1": 0.521,
+    "recall@3": 0.615,
+    "recall@5": 0.771,
+    "recall@10": 0.885,
+    "mrr": 0.757
+  },
+  "dense": {
+    "recall@1_article": 0.719,
+    "recall@3_article": 0.896,
+    "recall@5_article": 0.896,
+    "recall@10_article": 0.958,
+    "mrr_article": 0.865,
+    "recall@1": 0.531,
+    "recall@3": 0.771,
+    "recall@5": 0.833,
+    "recall@10": 0.927,
+    "mrr": 0.762
+  },
+  "hybrid": {
+    "recall@1_article": 0.562,
+    "recall@3_article": 0.802,
+    "recall@5_article": 0.958,
+    "recall@10_article": 0.979,
+    "mrr_article": 0.768,
+    "recall@1": 0.438,
+    "recall@3": 0.708,
+    "recall@5": 0.927,
+    "recall@10": 0.948,
+    "mrr": 0.679
+  },
+  "hybrid_rerank": {
+    "recall@1_article": 0.688,
+    "recall@3_article": 0.927,
+    "recall@5_article": 0.927,
+    "recall@10_article": 0.979,
+    "mrr_article": 0.875,
+    "recall@1": 0.625,
+    "recall@3": 0.833,
+    "recall@5": 0.865,
+    "recall@10": 0.917,
+    "mrr": 0.833
+  },
+  "hybrid_rerank_mq": {
+    "recall@1_article": 0.771,
+    "recall@3_article": 0.927,
+    "recall@5_article": 0.927,
+    "recall@10_article": 0.958,
+    "mrr_article": 0.938,
+    "recall@1": 0.708,
+    "recall@3": 0.927,
+    "recall@5": 0.927,
+    "recall@10": 0.927,
+    "mrr": 0.927
+  }
+}

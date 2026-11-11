@@ -1,0 +1,82 @@
+{
+  "timestamp": "2026-11-09 20:29",
+  "n_questions": 20,
+  "llm": "ollama:qwen2.5:7b",
+  "headline": "full",
+  "configs": {
+    "full": {
+      "n": 20,
+      "correctness": 0.8,
+      "manual_correctness": null,
+      "citation_precision": 0.833,
+      "abstention_accuracy": 1,
+      "false_abstention_rate": 0.062,
+      "latency_s": 32.404,
+      "latency_p95_s": 78.47,
+      "tokens": 1496.5,
+      "errors": 0
+    }
+  },
+  "retrieval": {
+    "bm25": {
+      "recall@1_article": 0.646,
+      "recall@3_article": 0.771,
+      "recall@5_article": 0.833,
+      "recall@10_article": 0.917,
+      "mrr_article": 0.804,
+      "recall@1": 0.521,
+      "recall@3": 0.615,
+      "recall@5": 0.771,
+      "recall@10": 0.885,
+      "mrr": 0.757
+    },
+    "dense": {
+      "recall@1_article": 0.719,
+      "recall@3_article": 0.896,
+      "recall@5_article": 0.896,
+      "recall@10_article": 0.958,
+      "mrr_article": 0.865,
+      "recall@1": 0.531,
+      "recall@3": 0.771,
+      "recall@5": 0.833,
+      "recall@10": 0.927,
+      "mrr": 0.762
+    },
+    "hybrid": {
+      "recall@1_article": 0.562,
+      "recall@3_article": 0.802,
+      "recall@5_article": 0.958,
+      "recall@10_article": 0.979,
+      "mrr_article": 0.768,
+      "recall@1": 0.438,
+      "recall@3": 0.708,
+      "recall@5": 0.927,
+      "recall@10": 0.948,
+      "mrr": 0.679
+    },
+    "hybrid_rerank": {
+      "recall@1_article": 0.688,
+      "recall@3_article": 0.927,
+      "recall@5_article": 0.927,
+      "recall@10_article": 0.979,
+      "mrr_article": 0.875,
+      "recall@1": 0.625,
+      "recall@3": 0.833,
+      "recall@5": 0.865,
+      "recall@10": 0.917,
+      "mrr": 0.833
+    },
+    "hybrid_rerank_mq": {
+      "recall@1_article": 0.771,
+      "recall@3_article": 0.927,
+      "recall@5_article": 0.927,
+      "recall@10_article": 0.958,
+      "mrr_article": 0.938,
+      "recall@1": 0.708,
+      "recall@3": 0.927,
+      "recall@5": 0.927,
+      "recall@10": 0.927,
+      "mrr": 0.927
+    }
+  }
+}
